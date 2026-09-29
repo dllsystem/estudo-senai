@@ -1,4 +1,4 @@
-/* O acervo vem de data.js: nenhum servidor, fetch ou armazenamento é necessário. */
+/* Acervo estático; preferências e seleção de impressão são salvas no navegador. */
 (() => {
   "use strict";
 
@@ -15,6 +15,15 @@
   const exams = new Map(data.exams.map(exam => [exam.cge, exam]));
   const topicById = new Map(topics.map(topic => [topic.id, topic]));
   const byId = new Map(questions.map(question => [question.id, question]));
+  const printModel = window.SENAI_PRINT;
+  const selectionKey = "senai-print-selection-v1";
+  const presentationKey = "senai-library-presentation-v1";
+  let savedPresentation = "text";
+  try { if (window.localStorage.getItem(presentationKey) === "original") savedPresentation = "original"; }
+  catch { /* A visualização continua funcionando sem armazenamento local. */ }
+  let savedSelection, storageAvailable = true;
+  try { savedSelection = JSON.parse(window.localStorage.getItem(selectionKey) || "null"); }
+  catch { storageAvailable = false; }
   const subjects = ["Língua Portuguesa", "Matemática", "Ciências"];
   const choices = ["A", "B", "C", "D", "E"];
   const hasChoice = (q, letter) => Boolean(q.alternativas[letter] || q.alternativas_imagens?.[letter]);
@@ -22,11 +31,15 @@
   const eligibleTopicCounts = new Map(topics.map(t => [t.id, eligible.filter(q => q.temas.includes(t.id)).length]));
   const state = {
     view: "library",
+    libraryPresentation: savedPresentation,
     library: { search: "", subject: "", topic: "", exam: "", page: 1 },
     exams: { search: "", year: "", modality: "", semester: "" },
     study: { subject: "", topics: new Set(), count: 10 },
     similarity: { subject: "", search: "" },
     session: null,
+    print: printModel.restore(savedSelection, byId),
+    printOrganization: "subject-space",
+    printFeedback: null,
   };
 
   const E = (tag, className, content) => {
@@ -147,7 +160,7 @@
       add(frame, image);
       add(wrap, E("span", "media-caption", media.tipo === "figura_extraida" ? `CGE ${q.cge} · página ${media.pagina}` : `CGE ${q.cge} · página ${media.pagina} · role a imagem para ver a página inteira`), frame);
     });
-    add(wrap, button("Ampliar página", "button-text", () => openPageViewer(q)));
+    add(wrap, button("Ampliar página", "button-text", () => openPageViewer(exams.get(q.cge), q.pagina || 1)));
     return wrap;
   }
 
@@ -219,7 +232,7 @@
     if (relationType === "quase_igual") add(meta, pill("Enunciado quase igual", "warm"));
     else if (relationType === "mesmo_metodo") add(meta, pill("Mesmo procedimento"));
     else if (relationType === "mesma_habilidade") add(meta, pill("Mesma habilidade"));
-    add(card, meta, context(q), questionImages(q), E("div", "question-text", q.enunciado), optionRows(q, null, !hideAnswers));
+    add(card, meta, questionPresentation(q, null, !hideAnswers));
     if (!choices.every(letter => hasChoice(q, letter))) add(card, E("p", "note", "Confira as alternativas na imagem da página original."));
     const foot = E("div", "variant-card-foot");
     add(foot, hideAnswers ? E("span", "note", "Resposta oculta durante o estudo") :
@@ -262,10 +275,317 @@
 
   function libraryCard(q) {
     const card = E("article", "panel question-card");
-    add(card, questionMeta(q), topicChips(q), context(q), questionImages(q), E("div", "question-text", q.enunciado), optionRows(q, null, true));
-    if (!choices.every(letter => hasChoice(q, letter))) add(card, E("p", "note", "Algumas alternativas ainda não foram transcritas; veja a página original acima."));
+    add(card, questionMeta(q), topicChips(q), questionPresentation(q, null, true, true, state.libraryPresentation === "original"));
     add(card, sourceFooter(q));
     return card;
+  }
+
+  function saveSelection() {
+    try { window.localStorage.setItem(selectionKey, JSON.stringify(state.print)); }
+    catch { storageAvailable = false; }
+    document.querySelectorAll(".nav-link").forEach(link => {
+      if (link.dataset.view === "print") link.textContent = `Montar prova${state.print.ids.length ? ` (${state.print.ids.length})` : ""}`;
+    });
+    document.querySelectorAll(".print-select").forEach(node => {
+      const selected = state.print.ids.includes(node.dataset.questionId);
+      node.textContent = selected ? "✓ Selecionada para impressão" : "+ Selecionar para impressão";
+      node.setAttribute("aria-pressed", String(selected));
+    });
+  }
+
+  function selectionButton(q) {
+    const selected = state.print.ids.includes(q.id);
+    const select = button(selected ? "✓ Selecionada para impressão" : "+ Selecionar para impressão", "button-text print-select", () => {
+      state.printFeedback = null;
+      if (state.print.ids.includes(q.id)) state.print.ids = state.print.ids.filter(id => id !== q.id);
+      else state.print.ids.push(q.id);
+      saveSelection();
+      const nowSelected = state.print.ids.includes(q.id);
+      select.textContent = nowSelected ? "✓ Selecionada para impressão" : "+ Selecionar para impressão";
+      select.setAttribute("aria-pressed", String(nowSelected));
+    });
+    select.dataset.questionId = q.id;
+    select.setAttribute("aria-pressed", String(selected));
+    select.disabled = !q.recortes?.length;
+    return select;
+  }
+
+  function originalImages(q) {
+    const wrap = E("div", "original-images");
+    if (!q.recortes?.length) {
+      add(wrap, E("p", "note", "O recorte desta questão ainda não está disponível."), pageButton(q));
+      return wrap;
+    }
+    q.recortes.forEach((crop, index) => {
+      const figure = E("figure", "original-figure");
+      const image = E("img", "original-image");
+      image.src = crop.arquivo;
+      image.loading = "lazy";
+      image.width = crop.largura;
+      image.height = crop.altura;
+      image.alt = `${crop.tipo === "apoio" ? "Texto ou figura de apoio" : "Enunciado e alternativas"} da questão ${q.numero}, CGE ${q.cge}, página ${crop.pagina}, parte ${index + 1} de ${q.recortes.length}`;
+      add(figure, E("figcaption", "media-caption", `${crop.tipo === "apoio" ? "Apoio da questão" : "Questão original"} · página ${crop.pagina}`), image);
+      add(wrap, figure);
+    });
+    add(wrap, E("p", "crop-note", "A numeração impressa nas imagens é a da prova original. Confira a prévia antes de imprimir."));
+    return wrap;
+  }
+
+  function questionPresentation(q, selected = null, reveal = true, showOptions = true, initiallyOriginal = false) {
+    const wrap = E("div", "question-presentation");
+    const controls = E("div", "question-view-controls");
+    const toggle = E("div", "view-toggle");
+    toggle.setAttribute("role", "group");
+    toggle.setAttribute("aria-label", "Apresentação da questão");
+    const content = E("div", "question-body");
+    const text = button("Texto", "button button-secondary", () => show(false));
+    const original = button("Imagem original", "button button-secondary original-toggle", () => show(true));
+    add(toggle, text, original);
+    add(controls, toggle, selectionButton(q));
+    function show(isOriginal) {
+      text.setAttribute("aria-pressed", String(!isOriginal));
+      original.setAttribute("aria-pressed", String(isOriginal));
+      content.replaceChildren();
+      if (isOriginal) add(content, originalImages(q));
+      else {
+        add(content, context(q), questionImages(q), E("div", "question-text", q.enunciado), showOptions ? optionRows(q, selected, reveal) : null);
+        if (!choices.every(letter => hasChoice(q, letter))) add(content, E("p", "note", "Algumas alternativas ainda não foram transcritas; consulte a imagem original."));
+      }
+    }
+    add(wrap, controls, content); show(initiallyOriginal);
+    return wrap;
+  }
+
+  function changePrintSelection(ids, message = "") {
+    state.printFeedback = message ? { message, previousIds: state.print.ids.slice() } : null;
+    state.print.ids = ids;
+    saveSelection();renderPrintBuilder();
+    root.querySelectorAll(".print-feedback")[0]?.focus();
+  }
+
+  function renderPrintBuilder() {
+    root.replaceChildren();
+    const selected = state.print.ids.map(id => byId.get(id));
+    const pageIntro = intro("Sua seleção para impressão", "Monte um caderno de exercícios.",
+      "Escolha questões na Biblioteca e organize a ordem aqui. A prova usa recortes do PDF original; o gabarito é impresso separadamente.");
+    add(pageIntro, button("Escolher questões →", "button button-secondary", () => switchView("library")));
+    add(root, pageIntro);
+    if (state.printFeedback) {
+      const feedback = E("div", "print-feedback");
+      feedback.setAttribute("role", "status");feedback.tabIndex = -1;
+      const previousIds = state.printFeedback.previousIds;
+      add(feedback, E("span", "", state.printFeedback.message),
+        button("Desfazer", "button-text undo-print-selection", () => changePrintSelection(previousIds)));
+      add(root, feedback);
+    }
+    if (!selected.length) {
+      add(root, add(E("div", "panel empty"), E("h2", "", "Seu caderno começa com uma questão."),
+        E("p", "", "Na Biblioteca, use “Selecionar para impressão” nos cartões que deseja incluir."),
+        button("Abrir Biblioteca", "button", () => switchView("library"))));
+      return;
+    }
+    const workspace = E("div", "workspace print-builder");
+    const aside = E("aside", "panel filter-panel");
+    add(aside, E("h2", "", "Cabeçalho"));
+    const inputField = (label, property, max) => {
+      const wrap = E("div", "filter-group");
+      const input = E("input", "field");
+      input.value = state.print[property]; input.maxLength = max;
+      input.setAttribute("aria-label", label);
+      input.addEventListener("input", () => { state.print[property] = input.value.slice(0,max); saveSelection(); });
+      add(wrap, E("label", "", label), input);return wrap;
+    };
+    add(aside, inputField("Título da prova", "title", 120), inputField("Turma", "className", 80), inputField("Data", "date", 30),
+      E("p", "note", "O campo de nome do aluno fica em branco para preencher no papel."));
+    const actions = E("div", "print-builder-actions");
+    add(actions, button("Prévia da prova", "button preview-test", () => openPrintPreview(false)),
+      button("Prévia do gabarito", "button button-secondary preview-key", () => openPrintPreview(true)));
+    add(aside, actions, E("p", "field-help", storageAvailable ? "Seleção e cabeçalho salvos neste navegador." :
+      "O navegador não permitiu salvar a seleção. Ela ficará disponível enquanto esta aba estiver aberta."));
+    const main = E("section", "print-selection");
+    main.setAttribute("aria-label", "Questões selecionadas para impressão");
+    const pageCount = printModel.pack(selected).length;
+    const countLabel = count => `${count} ${count === 1 ? "página" : "páginas"}`;
+    const selectionTools = E("div", "print-selection-tools");
+    add(selectionTools, E("span", "print-page-estimate", `${selected.length} no caderno · ${countLabel(pageCount)} A4`),
+      button("Limpar seleção", "button-text clear-print-selection", () => changePrintSelection([], "Todas as questões foram removidas da seleção.")));
+    add(main, add(E("div", "results-heading print-results-heading"), E("h2", "", "Questões selecionadas"), selectionTools));
+    const organization = E("div", "panel print-organization");
+    const organizationHelp = E("p", "field-help");
+    const updateOrganizationHelp = () => {
+      organizationHelp.textContent = state.printOrganization === "subject" ?
+        "Agrupa Português, Matemática e Ciências, mantendo a ordem atual dentro de cada matéria." :
+        state.printOrganization === "space" ?
+        "Reordena as questões para reduzir espaços vazios; matérias podem se misturar. Mantém o tamanho dos recortes." :
+        "Mantém cada matéria em sequência e procura encaixar melhor as questões dentro dela. Mantém o tamanho dos recortes.";
+    };
+    const organizationRow = E("div", "print-organization-row");
+    add(organizationRow, selectField("Organizar questões", [["subject-space", "Matéria + aproveitar páginas"], ["subject", "Por matéria"],
+      ["space", "Aproveitar páginas"]], state.printOrganization, value => { state.printOrganization = value;updateOrganizationHelp(); }),
+      button("Organizar", "button organize-print-selection", () => {
+        const ordered = printModel.organize(selected, state.printOrganization);
+        const after = printModel.pack(ordered).length;
+        const changed = ordered.some((q, index) => q.id !== selected[index].id);
+        const prefix = changed ? "Questões reorganizadas." : "A ordem atual foi mantida.";
+        const explanation = after > pageCount ? " Agrupar por matéria pode exigir mais páginas." :
+          state.printOrganization !== "subject" && after === pageCount ? " Sem redução de páginas nesta seleção." : "";
+        changePrintSelection(ordered.map(q => q.id), `${prefix} ${countLabel(pageCount)} → ${countLabel(after)} A4.${explanation}`);
+      }));
+    updateOrganizationHelp();add(organization, organizationRow, organizationHelp);add(main, organization,
+      E("p", "note", "A ordem abaixo define a numeração da prova e do gabarito. As imagens mantêm também o número da questão na fonte original."));
+    selected.forEach((q, index) => {
+      const card = E("article", "panel print-selection-card");
+      const heading = E("div", "print-selection-heading");
+      const details = E("div");
+      add(details, E("span", "eyebrow", `Questão ${index + 1} no caderno`), questionMeta(q));
+      const controls = E("div", "print-order-controls");
+      const up = button("↑", "button button-secondary move-up", () => {
+        changePrintSelection(printModel.move(state.print.ids, index, -1));
+      });
+      up.setAttribute("aria-label", `Mover questão ${index + 1} para cima`);up.disabled = index === 0;
+      const down = button("↓", "button button-secondary move-down", () => {
+        changePrintSelection(printModel.move(state.print.ids, index, 1));
+      });
+      down.setAttribute("aria-label", `Mover questão ${index + 1} para baixo`);down.disabled = index === selected.length-1;
+      const remove = button("Remover", "button-text remove-print-question", () => {
+        changePrintSelection(state.print.ids.filter(id => id !== q.id));
+      });
+      remove.setAttribute("aria-label", `Remover questão ${index + 1} do caderno`);
+      add(controls, up, down, remove);add(heading, details, controls);
+      const preview = E("details", "print-crop-details");
+      add(preview, E("summary", "", `Conferir recortes originais (${q.recortes?.length || 0})`));
+      preview.addEventListener("toggle", () => {
+        if (preview.open && !preview.dataset.loaded) { add(preview, originalImages(q)); preview.dataset.loaded = "true"; }
+      });
+      add(card, heading, E("p", "selection-excerpt", q.enunciado.slice(0,240) + (q.enunciado.length > 240 ? "…" : "")), preview);
+      add(main, card);
+    });
+    add(workspace, aside, main);add(root, workspace);
+  }
+
+  function openPrintPreview(isKey) {
+    const selected = state.print.ids.map(id => byId.get(id));
+    if (!selected.length) return;
+    const returnFocus = document.activeElement;
+    const overlay = E("div", "print-overlay");
+    overlay.setAttribute("role", "dialog");overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", isKey ? "Prévia do gabarito" : "Prévia da prova");
+    const toolbar = E("div", "print-preview-toolbar");
+    const status = E("p", "print-load-status", "Carregando imagens…");
+    status.setAttribute("role", "status");
+    const print = button(isKey ? "Imprimir gabarito" : "Imprimir prova", "button print-now", async () => {
+      if (print.disabled) return;
+      window.print();
+    });
+    print.disabled = true;
+    let downloadURL;
+    const download = button("Gerar PDF", "button button-secondary download-custom-pdf", async () => {
+      download.disabled = true; download.textContent = "Gerando PDF…";
+      try {
+        const bytes = await window.SENAI_PDF.create({questions:selected,settings:{...state.print},isKey,
+          loadImage: async filename => {
+            const response = await fetch(filename);
+            if (!response.ok) throw new Error("Imagem indisponível");
+            return response.arrayBuffer();
+          }});
+        downloadURL = URL.createObjectURL(new Blob([bytes],{type:"application/pdf"}));
+        const link = E("a","button button-secondary save-custom-pdf","Baixar PDF ↓");
+        link.href=downloadURL;link.download=isKey?"gabarito-caderno.pdf":"prova-caderno.pdf";
+        download.replaceWith(link);link.focus();
+        status.textContent="PDF pronto. Clique em Baixar PDF para salvar o arquivo e imprimir quando quiser.";
+      } catch {
+        status.textContent="Não foi possível gerar o PDF. Confira as imagens e use a opção Imprimir, se necessário.";
+      } finally { download.disabled=false;download.textContent="Gerar PDF"; }
+    });
+    download.disabled=true;
+    const close = button("← Voltar à seleção", "button button-secondary", () => {
+      overlay.remove();document.body.classList.remove("print-preview-open");
+      if (downloadURL) URL.revokeObjectURL(downloadURL);
+      document.querySelector(".site-shell")?.removeAttribute("inert");
+      returnFocus?.focus();
+    });
+    overlay.addEventListener("keydown", event => {
+      if (event.key === "Escape") close.click();
+      if (event.key === "Tab") {
+        if (event.shiftKey && document.activeElement === close) { event.preventDefault(); (print.disabled ? close : print).focus(); }
+        else if (!event.shiftKey && document.activeElement === (print.disabled ? close : print)) { event.preventDefault(); close.focus(); }
+      }
+    });
+    const outputActions=E("div","print-output-actions");
+    // Em file://, o navegador permite imprimir imagens, mas pode bloquear fetch de arquivos locais.
+    if (isKey || window.location?.protocol !== "file:") add(outputActions,download);
+    add(outputActions,print);
+    add(toolbar, close, add(E("div"), E("strong", "", isKey ? "Gabarito para conferência" : "Prova do aluno"), status), outputActions);
+    const paper = E("div", "print-pages");
+    const images = [];
+    const questionBadge = index => {
+      const badge = E("span", "print-question-badge", `${index} / ${selected.length}`);
+      badge.setAttribute("aria-label", `Questão ${index} de ${selected.length} no caderno`);
+      return badge;
+    };
+    const sheetHeader = (first) => {
+      const header = E("header", `print-sheet-header${first ? " first" : ""}`);
+      add(header, E("h1", "", `${isKey ? "Gabarito · " : ""}${state.print.title || "Lista de exercícios"}`));
+      if (first) {
+        if (!isKey) add(header, E("p", "", "Nome: ______________________________________________________________"));
+        add(header, E("p", "", `Turma: ${state.print.className || "________________"}     Data: ${state.print.date || "____/____/________"}`),
+          E("small", "", isKey ? "O badge amarelo identifica a questão no caderno: número / total de questões." :
+            "Use o número do badge amarelo (questão / total). Os números nas imagens são das provas originais."));
+      }
+      return header;
+    };
+    const addSheet = (index, total) => {
+      const sheet = E("section", "print-sheet");
+      add(sheet, sheetHeader(index === 0), E("div", "print-page-number", `${index + 1} / ${total}`));
+      add(paper, sheet);return sheet;
+    };
+    if (isKey) {
+      const count = Math.ceil(selected.length/32);
+      for (let page = 0; page < count; page++) {
+        const sheet = addSheet(page, count);
+        const table = E("table", "print-answer-table");
+        const header = E("tr");
+        ["Questão", "Origem", "Disciplina", "Resposta"].forEach(label => add(header, E("th", "", label)));
+        add(table, add(E("thead"), header));const body = E("tbody");
+        selected.slice(page*32,page*32+32).forEach((q,index) => {
+          const row = E("tr");
+          add(row, add(E("td"), questionBadge(page*32+index+1)));
+          [`CGE ${q.cge} · ${q.numero}`, q.disciplina, printModel.answer(q)]
+            .forEach(value => add(row, E("td", "", value)));
+          add(body,row);
+        });
+        add(table,body);add(sheet,table);
+      }
+    } else {
+      const pages = printModel.pack(selected);
+      pages.forEach((page,index) => {
+        const sheet = addSheet(index,pages.length);
+        page.items.forEach(item => {
+          const block = E("section", "print-block");block.style.height = `${item.total}mm`;
+          const label = `Questão ${item.index} · CGE ${item.cge} / original ${item.numero} · ${item.crop.tipo === "apoio" ? "Apoio" : "Questão"}${item.parts > 1 ? ` · parte ${item.part}/${item.parts}` : ""}`;
+          add(block, add(E("div", "print-block-label"), E("span", "print-block-source", label), questionBadge(item.index)));
+          const image = E("img", "print-crop");
+          image.alt = label;image.width = item.crop.largura;image.height = item.crop.altura;
+          image.style.width = `${item.width}mm`;image.style.height = `${item.height}mm`;
+          // Todos os recortes devem carregar antes de habilitar a impressão.
+          images.push(new Promise((resolve,reject) => {
+            image.onload = () => resolve();image.onerror = () => reject(new Error(item.crop.arquivo));
+          }));
+          image.src = item.crop.arquivo;add(block,image);add(sheet,block);
+        });
+      });
+    }
+    add(overlay,toolbar,paper);document.body.appendChild(overlay);
+    document.body.classList.add("print-preview-open");
+    document.querySelector(".site-shell")?.setAttribute("inert", "");
+    close.focus();
+    Promise.all(images).then(() => {
+      print.disabled = false;
+      download.disabled = false;
+      status.textContent = `${paper.children.length} ${paper.children.length === 1 ? "página" : "páginas"} · A4 · escala 100%. Desative cabeçalhos e rodapés do navegador. Pode salvar como PDF.`;
+    }).catch(() => {
+      status.textContent = "Uma imagem não carregou. Volte à seleção e abra a prévia novamente antes de imprimir.";
+    });
   }
 
   function renderLibrary() {
@@ -327,8 +647,26 @@
       const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
       f.page = Math.min(f.page, pageCount);
       results.replaceChildren();
-      const heading = E("div", "results-heading");
-      add(heading, E("h2", "", "Questões"), E("span", "", `${fmt(filtered.length)} ${filtered.length === 1 ? "resultado" : "resultados"}`));
+      const heading = E("div", "results-heading library-results-heading");
+      const tools = E("div", "results-tools");
+      const presentation = E("div", "library-presentation");
+      const toggle = E("div", "view-toggle");
+      toggle.setAttribute("role", "group");
+      toggle.setAttribute("aria-label", "Visualização de todas as questões");
+      [["text", "Texto"], ["original", "Imagem original"]].forEach(([mode, label]) => {
+        const control = button(label, `button button-secondary global-view-${mode}`, () => {
+          state.libraryPresentation = mode;
+          try { window.localStorage.setItem(presentationKey, mode); }
+          catch { /* A preferência ainda é mantida durante esta sessão. */ }
+          updateResults();
+          results.querySelectorAll(`.global-view-${mode}`)[0].focus();
+        });
+        control.setAttribute("aria-pressed", String(state.libraryPresentation === mode));
+        add(toggle, control);
+      });
+      add(presentation, E("span", "", "Exibir todas:"), toggle);
+      add(tools, presentation, E("span", "result-count", `${fmt(filtered.length)} ${filtered.length === 1 ? "resultado" : "resultados"}`));
+      add(heading, E("h2", "", "Questões"), tools);
       results.appendChild(heading);
       if (!filtered.length) {
         add(results, add(E("div", "panel empty"), E("h3", "", "Nenhuma questão encontrada"), E("p", "", "Experimente outra palavra, disciplina ou tema.")));
@@ -565,7 +903,7 @@
     const track = E("div", "progress-track");
     const fill = E("div", "progress-fill");
     fill.style.width = `${((session.index + 1) / session.ids.length) * 100}%`;
-    add(panel, add(track, fill), questionMeta(q), context(q), questionImages(q), E("div", "question-text", q.enunciado));
+    add(panel, add(track, fill), questionMeta(q), questionPresentation(q, null, false, false));
     const options = E("div", "options");
     options.setAttribute("role", "group");
     options.setAttribute("aria-label", "Alternativas da questão");
@@ -614,7 +952,7 @@
       const card = E("article", "panel review-card");
       const top = E("div", "review-top");
       add(top, E("span", "meta-number", `Questão ${index + 1} · CGE ${q.cge} / ${q.numero}`), E("span", `review-result ${!selected ? "skip" : selected === q.resposta ? "good" : "bad"}`, result));
-      add(card, top, context(q), questionImages(q), E("h3", "", q.enunciado), optionRows(q, selected, true), sourceFooter(q, selected));
+      add(card, top, questionPresentation(q, selected, true), sourceFooter(q, selected));
       add(list, card);
     });
     add(main, score, actions, list);
@@ -742,11 +1080,13 @@
     else if (view === "exams") renderExams();
     else if (view === "study") renderStudy();
     else if (view === "similarity") renderSimilarity();
+    else if (view === "print") renderPrintBuilder();
     else renderAbout();
     window.scrollTo({ top: 0, behavior: "auto" });
     root.focus({ preventScroll: true });
   }
 
   document.querySelectorAll(".nav-link").forEach(link => link.addEventListener("click", () => switchView(link.dataset.view)));
+  saveSelection();
   switchView("library");
 })();

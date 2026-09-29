@@ -4,6 +4,14 @@ Site estático para consultar e estudar 2.580 questões de 43 cadernos de provas
 
 O projeto é independente e não é um serviço oficial do SENAI.
 
+## Imagens originais e impressão
+
+A Biblioteca permite alternar entre texto e recortes JPEG das questões, individualmente ou para toda a lista. Cada questão inclui os textos e as figuras de apoio identificados na extração.
+
+Em **Montar prova**, selecione exercícios, ajuste título, turma e data e organize por matéria ou para aproveitar melhor as páginas A4. É possível limpar a seleção e desfazer a limpeza ou a organização. A prévia e o PDF mostram badges amarelos com **número / total de questões**, repetidos nas partes da mesma questão e no gabarito separado.
+
+A geração do PDF acontece no navegador. Preferências e seleções ficam no armazenamento local de cada navegador e endereço; não são enviadas a serviços externos. Os recortes foram extraídos automaticamente e conferidos por amostragem: revise a prévia antes de imprimir para alunos.
+
 ## Publicação no GitHub Pages
 
 Publique a raiz deste repositório a partir da branch `main`. O `index.html` carrega os dados de `data.js` e os arquivos de mídia por caminhos relativos, compatíveis com a URL de um projeto (`https://usuario.github.io/nome-do-repositorio/`). Não há build nem servidor.

@@ -3,9 +3,13 @@ ESTUDO SENAI — versão offline
 1. Descompacte o arquivo ZIP inteiro.
 2. Abra index.html no navegador (duplo clique). Não é necessário servidor ou internet.
 3. Use Biblioteca para consultar todas as 2.580 questões, Estudar para montar um simulado, Similaridade para explorar variantes ou Provas e PDFs para ver e baixar os cadernos e gabaritos.
+4. Na Biblioteca, escolha Texto ou Imagem original em uma questão ou use o seletor geral para mudar todas. As imagens preservam o enunciado, as alternativas e os apoios da prova original.
+5. Use Selecionar para impressão e abra Montar prova. Ajuste o cabeçalho, remova questões ou limpe a seleção. É possível organizar por matéria, por aproveitamento de páginas ou combinar as duas opções. A limpeza e a organização permitem desfazer a última ação enquanto a página permanece aberta.
+6. Confira a prévia da prova e a do gabarito. Os badges amarelos mostram o número da questão no novo caderno e o total (por exemplo, 1 / 5). Todas as partes da mesma questão repetem esse número; os números dentro das imagens pertencem às provas originais.
+7. Use Imprimir para imprimir ou salvar como PDF pelo navegador. No localhost e no site publicado, Gerar PDF também cria o arquivo diretamente; em file://, use a impressão nativa para a prova, pois o navegador pode bloquear a leitura dos arquivos locais.
 
 As questões e gabaritos vêm de 43 cadernos de processos seletivos do SENAI. O acervo contém 94 PDFs originais, com 51 documentos contendo prova e 51 contendo gabarito (alguns reúnem ambos). 5 cadernos são de Cursos Técnicos – Empresas. Há 2543 respostas válidas; as 37 anuladas não entram no simulado. As 58 extrações marcadas para revisão também não entram, mas continuam visíveis na Biblioteca. Há 552 questões que podem depender de imagem/tabela; use 'Ver página da prova' para consultar a imagem no próprio site. Os PDFs completos também estão disponíveis.
 O arquivo questoes_senai.sqlite3 inclui as tabelas questao_imagens e alternativa_imagens, cujos caminhos apontam para as pastas de imagens desta pasta.
 Os temas são sugestões automáticas baseadas em palavras do enunciado e não substituem uma classificação pedagógica revisada. Questões sem tema sugerido aparecem ao escolher 'Todos os temas'.
 A triagem e a revisão de similaridade identificaram 420 questões em 127 famílias; 16 têm enunciado quase igual a outro. As relações são conservadoras e podem exigir revisão pedagógica.
-O aplicativo não salva respostas ou histórico; os resultados ficam na sessão aberta.
+O aplicativo não salva respostas ou histórico; os resultados ficam na sessão aberta. A preferência de visualização, a seleção de impressão e o cabeçalho são salvos neste navegador. Cada endereço tem sua própria seleção: localhost e site publicado são independentes. As seleções pessoais não são enviadas ao servidor nem gravadas no SQLite.
