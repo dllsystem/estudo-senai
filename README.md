@@ -6,7 +6,7 @@ O projeto é independente e não é um serviço oficial do SENAI.
 
 ## Imagens originais e impressão
 
-A Biblioteca abre com os recortes JPEG das questões por padrão e permite alternar para texto, individualmente ou para toda a lista. Cada questão inclui os textos e as figuras de apoio identificados na extração. O botão **Ver gabarito** revela a resposta daquela questão; **Ocultar gabarito** volta a escondê-la. No modo texto, o destaque da alternativa correta acompanha essa escolha.
+A Biblioteca abre com os recortes JPEG das questões por padrão e permite alternar para texto, individualmente ou para toda a lista. Cada questão inclui os textos e as figuras de apoio identificados na extração. A resposta correta permanece visível no rodapé e destacada no modo texto. **Ver gabarito** abre o PDF original em outra aba; nos arquivos que reúnem prova e gabarito, o link aponta para a página do gabarito.
 
 Em **Montar prova**, selecione exercícios, ajuste título, turma e data e organize por matéria ou para aproveitar melhor as páginas A4. É possível limpar a seleção e desfazer a limpeza ou a organização. A prévia e o PDF mostram badges amarelos com **número / total de questões**, repetidos nas partes da mesma questão e no gabarito separado.
 

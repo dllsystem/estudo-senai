@@ -131,9 +131,21 @@
     return button("Ver prova completa", `${className} full-exam-link`, () => openPageViewer(exams.get(cge)));
   }
 
-  function questionSourceActions(q) {
+  function answerKeyLink(q) {
+    const document = exams.get(q.cge)?.documentos.find(item => item.tipo === "Gabarito") ||
+      exams.get(q.cge)?.documentos.find(item => item.tipo === "Prova e gabarito");
+    if (!document) return null;
+    const link = E("a", "button-text answer-key-link", "Ver gabarito");
+    link.href = `${document.arquivo}#page=${document.paginas_gabarito?.[0] || 1}`;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.title = `Abrir PDF do gabarito CGE ${q.cge} em outra aba`;
+    return link;
+  }
+
+  function questionSourceActions(q, hideAnswers = false) {
     const actions = E("div", "question-source-actions");
-    add(actions, pageButton(q), examButton(q.cge));
+    add(actions, hideAnswers ? null : answerKeyLink(q), pageButton(q), examButton(q.cge));
     return actions;
   }
 
@@ -232,12 +244,12 @@
     if (relationType === "quase_igual") add(meta, pill("Enunciado quase igual", "warm"));
     else if (relationType === "mesmo_metodo") add(meta, pill("Mesmo procedimento"));
     else if (relationType === "mesma_habilidade") add(meta, pill("Mesma habilidade"));
-    const presentation = questionPresentation(q, null, false, true, state.libraryPresentation === "original");
+    const presentation = questionPresentation(q, null, !hideAnswers, true, state.libraryPresentation === "original");
     add(card, meta, presentation);
     if (!choices.every(letter => hasChoice(q, letter))) add(card, E("p", "note", "Confira as alternativas na imagem da página original."));
     const foot = E("div", "variant-card-foot");
     add(foot, hideAnswers ? E("span", "note", "Resposta oculta durante o estudo") :
-      answerDisclosure(q, presentation.setAnswerVisible), questionSourceActions(q));
+      E("span", `answer-label${q.gabarito === "anulada" ? " annulled" : ""}`, answerText(q)), questionSourceActions(q, hideAnswers));
     add(card, foot);
     return card;
   }
@@ -270,30 +282,9 @@
       q.gabarito === "válida" && choices.includes(q.resposta) ? `Resposta correta: ${q.resposta}` : "Resposta indisponível";
   }
 
-  let answerDisclosureId = 0;
-  function answerDisclosure(q, onToggle) {
-    const wrap = E("div", "answer-disclosure");
-    const answer = E("span", `answer-label${q.gabarito === "anulada" ? " annulled" : ""}`);
-    answer.id = `answer-disclosure-${++answerDisclosureId}`;
-    answer.setAttribute("aria-live", "polite");
-    let visible = false;
-    const toggle = button("Ver gabarito", "button button-secondary answer-toggle", () => {
-      visible = !visible;
-      toggle.textContent = visible ? "Ocultar gabarito" : "Ver gabarito";
-      toggle.setAttribute("aria-expanded", String(visible));
-      answer.textContent = visible ? answerText(q) : "";
-      onToggle(visible);
-    });
-    toggle.setAttribute("aria-expanded", "false");
-    toggle.setAttribute("aria-controls", answer.id);
-    add(wrap, toggle, answer);
-    return wrap;
-  }
-
-  function sourceFooter(q, selected, onReveal = null) {
+  function sourceFooter(q, selected) {
     const footer = E("div", "question-footer");
-    const answer = onReveal ? answerDisclosure(q, onReveal) :
-      E("span", `answer-label${q.gabarito === "anulada" ? " annulled" : ""}`, answerText(q));
+    const answer = E("span", `answer-label${q.gabarito === "anulada" ? " annulled" : ""}`, answerText(q));
     if (selected !== undefined) answer.textContent = `Sua resposta: ${selected || "em branco"} · ${answerText(q)}`;
     add(footer, answer, variantButton(q), questionSourceActions(q));
     return footer;
@@ -301,9 +292,9 @@
 
   function libraryCard(q) {
     const card = E("article", "panel question-card");
-    const presentation = questionPresentation(q, null, false, true, state.libraryPresentation === "original");
+    const presentation = questionPresentation(q, null, true, true, state.libraryPresentation === "original");
     add(card, questionMeta(q), topicChips(q), presentation);
-    add(card, sourceFooter(q, undefined, presentation.setAnswerVisible));
+    add(card, sourceFooter(q));
     return card;
   }
 
@@ -365,11 +356,6 @@
     toggle.setAttribute("role", "group");
     toggle.setAttribute("aria-label", "Apresentação da questão");
     const content = E("div", "question-body");
-    const options = E("div", "question-options");
-    wrap.setAnswerVisible = visible => {
-      reveal = visible;
-      if (showOptions) options.replaceChildren(optionRows(q, selected, reveal));
-    };
     const text = button("Texto", "button button-secondary", () => show(false));
     const original = button("Imagem original", "button button-secondary original-toggle", () => show(true));
     add(toggle, text, original);
@@ -380,8 +366,7 @@
       content.replaceChildren();
       if (isOriginal) add(content, originalImages(q));
       else {
-        if (showOptions) options.replaceChildren(optionRows(q, selected, reveal));
-        add(content, context(q), questionImages(q), E("div", "question-text", q.enunciado), showOptions ? options : null);
+        add(content, context(q), questionImages(q), E("div", "question-text", q.enunciado), showOptions ? optionRows(q, selected, reveal) : null);
         if (!choices.every(letter => hasChoice(q, letter))) add(content, E("p", "note", "Algumas alternativas ainda não foram transcritas; consulte a imagem original."));
       }
     }

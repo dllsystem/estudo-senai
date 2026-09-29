@@ -159,8 +159,6 @@ h3 { font-size: 25px; margin-bottom: 8px; }
 .question-source-actions .button-text { font-size: 13px; white-space: nowrap; }
 .answer-label { color: var(--green-dark); font-weight: 800; }
 .answer-label.annulled { color: var(--orange); }
-.answer-disclosure { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
-.answer-toggle { padding: 8px 14px; font-size: 13px; }
 .pdf-link { font-weight: 800; font-size: 13px; white-space: nowrap; }
 .inline-media { margin: 18px 0 20px; border: 1px solid #cbd9cd; border-radius: 10px; background: #f1f6f0; padding: 13px; }
 .media-heading { display: block; color: var(--green-dark); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .065em; margin-bottom: 8px; }
