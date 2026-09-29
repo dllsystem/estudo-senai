@@ -3,7 +3,7 @@ ESTUDO SENAI — versão offline
 1. Descompacte o arquivo ZIP inteiro.
 2. Abra index.html no navegador (duplo clique). Não é necessário servidor ou internet.
 3. Use Biblioteca para consultar todas as 2.580 questões, Estudar para montar um simulado, Similaridade para explorar variantes ou Provas e PDFs para ver e baixar os cadernos e gabaritos.
-4. Na Biblioteca, escolha Texto ou Imagem original em uma questão ou use o seletor geral para mudar todas. As imagens preservam o enunciado, as alternativas e os apoios da prova original.
+4. A Biblioteca abre em Imagem original por padrão. Você pode escolher Texto em uma questão ou usar o seletor geral; essa preferência é lembrada no navegador. As imagens preservam o enunciado, as alternativas e os apoios da prova original. Use Ver gabarito no rodapé da questão para revelar a resposta, ou Ocultar gabarito para escondê-la novamente. No modo Texto, a alternativa correta só recebe destaque quando o gabarito está visível.
 5. Use Selecionar para impressão e abra Montar prova. Ajuste o cabeçalho, remova questões ou limpe a seleção. É possível organizar por matéria, por aproveitamento de páginas ou combinar as duas opções. A limpeza e a organização permitem desfazer a última ação enquanto a página permanece aberta.
 6. Confira a prévia da prova e a do gabarito. Os badges amarelos mostram o número da questão no novo caderno e o total (por exemplo, 1 / 5). Todas as partes da mesma questão repetem esse número; os números dentro das imagens pertencem às provas originais.
 7. Use Imprimir para imprimir ou salvar como PDF pelo navegador. No localhost e no site publicado, Gerar PDF também cria o arquivo diretamente; em file://, use a impressão nativa para a prova, pois o navegador pode bloquear a leitura dos arquivos locais.

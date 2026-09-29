@@ -17,9 +17,9 @@
   const byId = new Map(questions.map(question => [question.id, question]));
   const printModel = window.SENAI_PRINT;
   const selectionKey = "senai-print-selection-v1";
-  const presentationKey = "senai-library-presentation-v1";
-  let savedPresentation = "text";
-  try { if (window.localStorage.getItem(presentationKey) === "original") savedPresentation = "original"; }
+  const presentationKey = "senai-library-presentation-v2";
+  let savedPresentation = "original";
+  try { if (window.localStorage.getItem(presentationKey) === "text") savedPresentation = "text"; }
   catch { /* A visualização continua funcionando sem armazenamento local. */ }
   let savedSelection, storageAvailable = true;
   try { savedSelection = JSON.parse(window.localStorage.getItem(selectionKey) || "null"); }
@@ -232,11 +232,12 @@
     if (relationType === "quase_igual") add(meta, pill("Enunciado quase igual", "warm"));
     else if (relationType === "mesmo_metodo") add(meta, pill("Mesmo procedimento"));
     else if (relationType === "mesma_habilidade") add(meta, pill("Mesma habilidade"));
-    add(card, meta, questionPresentation(q, null, !hideAnswers));
+    const presentation = questionPresentation(q, null, false, true, state.libraryPresentation === "original");
+    add(card, meta, presentation);
     if (!choices.every(letter => hasChoice(q, letter))) add(card, E("p", "note", "Confira as alternativas na imagem da página original."));
     const foot = E("div", "variant-card-foot");
     add(foot, hideAnswers ? E("span", "note", "Resposta oculta durante o estudo") :
-      E("span", "answer-label", q.resposta ? `Resposta correta: ${q.resposta}` : "Resposta indisponível"), questionSourceActions(q));
+      answerDisclosure(q, presentation.setAnswerVisible), questionSourceActions(q));
     add(card, foot);
     return card;
   }
@@ -264,19 +265,45 @@
     dialog.showModal();
   }
 
-  function sourceFooter(q, selected) {
+  function answerText(q) {
+    return q.gabarito === "anulada" ? "Questão anulada" :
+      q.gabarito === "válida" && choices.includes(q.resposta) ? `Resposta correta: ${q.resposta}` : "Resposta indisponível";
+  }
+
+  let answerDisclosureId = 0;
+  function answerDisclosure(q, onToggle) {
+    const wrap = E("div", "answer-disclosure");
+    const answer = E("span", `answer-label${q.gabarito === "anulada" ? " annulled" : ""}`);
+    answer.id = `answer-disclosure-${++answerDisclosureId}`;
+    answer.setAttribute("aria-live", "polite");
+    let visible = false;
+    const toggle = button("Ver gabarito", "button button-secondary answer-toggle", () => {
+      visible = !visible;
+      toggle.textContent = visible ? "Ocultar gabarito" : "Ver gabarito";
+      toggle.setAttribute("aria-expanded", String(visible));
+      answer.textContent = visible ? answerText(q) : "";
+      onToggle(visible);
+    });
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.setAttribute("aria-controls", answer.id);
+    add(wrap, toggle, answer);
+    return wrap;
+  }
+
+  function sourceFooter(q, selected, onReveal = null) {
     const footer = E("div", "question-footer");
-    const answerText = q.gabarito === "anulada" ? "Questão anulada" : q.resposta ? `Resposta correta: ${q.resposta}` : "Resposta indisponível";
-    const answer = E("span", `answer-label${q.gabarito === "anulada" ? " annulled" : ""}`, answerText);
-    if (selected !== undefined) answer.textContent = `Sua resposta: ${selected || "em branco"} · ${answerText}`;
+    const answer = onReveal ? answerDisclosure(q, onReveal) :
+      E("span", `answer-label${q.gabarito === "anulada" ? " annulled" : ""}`, answerText(q));
+    if (selected !== undefined) answer.textContent = `Sua resposta: ${selected || "em branco"} · ${answerText(q)}`;
     add(footer, answer, variantButton(q), questionSourceActions(q));
     return footer;
   }
 
   function libraryCard(q) {
     const card = E("article", "panel question-card");
-    add(card, questionMeta(q), topicChips(q), questionPresentation(q, null, true, true, state.libraryPresentation === "original"));
-    add(card, sourceFooter(q));
+    const presentation = questionPresentation(q, null, false, true, state.libraryPresentation === "original");
+    add(card, questionMeta(q), topicChips(q), presentation);
+    add(card, sourceFooter(q, undefined, presentation.setAnswerVisible));
     return card;
   }
 
@@ -338,6 +365,11 @@
     toggle.setAttribute("role", "group");
     toggle.setAttribute("aria-label", "Apresentação da questão");
     const content = E("div", "question-body");
+    const options = E("div", "question-options");
+    wrap.setAnswerVisible = visible => {
+      reveal = visible;
+      if (showOptions) options.replaceChildren(optionRows(q, selected, reveal));
+    };
     const text = button("Texto", "button button-secondary", () => show(false));
     const original = button("Imagem original", "button button-secondary original-toggle", () => show(true));
     add(toggle, text, original);
@@ -348,7 +380,8 @@
       content.replaceChildren();
       if (isOriginal) add(content, originalImages(q));
       else {
-        add(content, context(q), questionImages(q), E("div", "question-text", q.enunciado), showOptions ? optionRows(q, selected, reveal) : null);
+        if (showOptions) options.replaceChildren(optionRows(q, selected, reveal));
+        add(content, context(q), questionImages(q), E("div", "question-text", q.enunciado), showOptions ? options : null);
         if (!choices.every(letter => hasChoice(q, letter))) add(content, E("p", "note", "Algumas alternativas ainda não foram transcritas; consulte a imagem original."));
       }
     }
