@@ -23,6 +23,7 @@
   const state = {
     view: "library",
     library: { search: "", subject: "", topic: "", exam: "", page: 1 },
+    exams: { search: "", year: "", modality: "", semester: "" },
     study: { subject: "", topics: new Set(), count: 10 },
     similarity: { subject: "", search: "" },
     session: null,
@@ -63,13 +64,19 @@
 
   function pill(label, variant = "neutral") { return E("span", `pill pill-${variant}`, label); }
 
-  function openPageViewer(q) {
-    const exam = exams.get(q.cge);
-    let page = q.pagina || 1;
+  function downloadLink(document, label, className = "button button-secondary") {
+    const link = E("a", `${className} pdf-download`, label);
+    link.href = document.arquivo;
+    link.download = document.nome;
+    return link;
+  }
+
+  function openPageViewer(exam, firstPage = 1, heading = `CGE ${exam.cge} · Prova completa`) {
+    let page = firstPage;
     const dialog = E("dialog", "page-dialog");
-    dialog.setAttribute("aria-label", `Páginas da prova CGE ${q.cge}`);
+    dialog.setAttribute("aria-label", `Páginas da prova CGE ${exam.cge}`);
     const toolbar = E("div", "page-toolbar");
-    const title = E("strong", "", `CGE ${q.cge} · Questão ${q.numero}`);
+    const title = E("strong", "", heading);
     const count = E("span", "page-count");
     const controls = E("div", "page-controls");
     const previous = button("← Anterior", "button button-secondary", () => { page--; showPage(); });
@@ -78,18 +85,19 @@
       imageArea.classList.toggle("is-zoomed", !imageArea.classList.contains("is-zoomed"));
       zoom.textContent = imageArea.classList.contains("is-zoomed") ? "Ajustar" : "Ampliar";
     });
+    const download = downloadLink(exam.documentos[0], "Baixar PDF ↓", "button button-secondary");
     const close = button("Fechar ×", "button button-secondary", () => dialog.close());
-    add(controls, previous, count, next, zoom, close);
+    add(controls, previous, count, next, zoom, download, close);
     add(toolbar, title, controls);
     const imageArea = E("div", "page-preview");
     const image = E("img", "page-image");
-    image.alt = `Página ${page} da prova CGE ${q.cge}`;
+    image.alt = `Página ${page} da prova CGE ${exam.cge}`;
     add(imageArea, image);
     add(dialog, toolbar, imageArea);
     function showPage() {
       page = Math.min(Math.max(page, 1), exam.paginas);
-      image.src = `paginas/CGE${q.cge}-p${page}.webp`;
-      image.alt = `Página ${page} da prova CGE ${q.cge}`;
+      image.src = `paginas/CGE${exam.cge}-p${page}.webp`;
+      image.alt = `Página ${page} da prova CGE ${exam.cge}`;
       count.textContent = `${page} / ${exam.paginas}`;
       previous.disabled = page <= 1;
       next.disabled = page >= exam.paginas;
@@ -102,7 +110,18 @@
   }
 
   function pageButton(q) {
-    return button("Ver página da prova", "button-text pdf-link", () => openPageViewer(q));
+    return button("Ver página da prova", "button-text pdf-link", () =>
+      openPageViewer(exams.get(q.cge), q.pagina || 1, `CGE ${q.cge} · Questão ${q.numero}`));
+  }
+
+  function examButton(cge, className = "button-text") {
+    return button("Ver prova completa", `${className} full-exam-link`, () => openPageViewer(exams.get(cge)));
+  }
+
+  function questionSourceActions(q) {
+    const actions = E("div", "question-source-actions");
+    add(actions, pageButton(q), examButton(q.cge));
+    return actions;
   }
 
   function questionImages(q) {
@@ -204,7 +223,7 @@
     if (!choices.every(letter => hasChoice(q, letter))) add(card, E("p", "note", "Confira as alternativas na imagem da página original."));
     const foot = E("div", "variant-card-foot");
     add(foot, hideAnswers ? E("span", "note", "Resposta oculta durante o estudo") :
-      E("span", "answer-label", q.resposta ? `Resposta correta: ${q.resposta}` : "Resposta indisponível"), pageButton(q));
+      E("span", "answer-label", q.resposta ? `Resposta correta: ${q.resposta}` : "Resposta indisponível"), questionSourceActions(q));
     add(card, foot);
     return card;
   }
@@ -237,7 +256,7 @@
     const answerText = q.gabarito === "anulada" ? "Questão anulada" : q.resposta ? `Resposta correta: ${q.resposta}` : "Resposta indisponível";
     const answer = E("span", `answer-label${q.gabarito === "anulada" ? " annulled" : ""}`, answerText);
     if (selected !== undefined) answer.textContent = `Sua resposta: ${selected || "em branco"} · ${answerText}`;
-    add(footer, answer, variantButton(q), pageButton(q));
+    add(footer, answer, variantButton(q), questionSourceActions(q));
     return footer;
   }
 
@@ -328,6 +347,115 @@
       add(controls, prev, next);
       add(pagination, controls);
       add(results, pagination);
+    }
+    add(workspace, aside, results);
+    add(root, pageIntro, stats, workspace);
+    updateResults();
+  }
+
+  function renderExams() {
+    root.replaceChildren();
+    const allDocuments = data.exams.flatMap(exam => exam.documentos);
+    const years = [...new Set(data.exams.map(exam => exam.ano))].sort((a, b) => Number(b) - Number(a));
+    const modalities = [...new Set(data.exams.map(exam => exam.modalidade))].sort();
+    const pageIntro = intro("Documentos do acervo", "Provas prontas para consultar e imprimir.",
+      "Encontre o caderno pelo ano, semestre ou modalidade. Cada registro traz os PDFs usados, seus gabaritos e a fonte original.");
+    const stats = E("div", "stats");
+    [[fmt(data.exams.length), "cadernos de prova"], [fmt(allDocuments.length), "PDFs distintos"],
+      [fmt(years.length), "anos no acervo"], [fmt(questions.length), "questões vinculadas"]]
+      .forEach(([number, label]) => add(stats, add(E("div", "stat"), E("strong", "", number), E("span", "", label))));
+    const workspace = E("div", "workspace");
+    const aside = E("aside", "panel filter-panel");
+    add(aside, add(E("div", "panel-title"), E("h2", "", "Filtrar provas")));
+    const searchGroup = E("div", "filter-group");
+    const searchLabel = E("label", "", "Buscar CGE ou arquivo");
+    searchLabel.htmlFor = "exam-search";
+    const search = E("input", "field");
+    search.id = "exam-search";
+    search.type = "search";
+    search.placeholder = "Ex.: 2245 ou 2024";
+    search.value = state.exams.search;
+    search.addEventListener("input", () => { state.exams.search = search.value; updateResults(); });
+    add(searchGroup, searchLabel, search);
+    const year = selectField("Ano", [["", "Todos os anos"], ...years.map(item => [item, item])], state.exams.year,
+      value => { state.exams.year = value; updateResults(); });
+    const modality = selectField("Modalidade", [["", "Todas as modalidades"], ...modalities.map(item => [item, item])], state.exams.modality,
+      value => { state.exams.modality = value; updateResults(); });
+    const semester = selectField("Semestre", [["", "Todos os semestres"], ["1", "1º semestre"], ["2", "2º semestre"]], state.exams.semester,
+      value => { state.exams.semester = value; updateResults(); });
+    add(aside, searchGroup, year, modality, semester,
+      button("Limpar filtros", "button-text", () => {
+        state.exams = { search: "", year: "", modality: "", semester: "" };
+        renderExams();
+      }));
+    const results = E("section", "result-area");
+    results.setAttribute("aria-label", "Lista de provas e PDFs");
+    function renderDocument(doc, exam) {
+      const section = E("section", "exam-document");
+      const heading = E("div", "exam-document-heading");
+      add(heading, E("h4", "", doc.tipo), pill(doc.origem_oficial ? "Fonte oficial" : "Fonte de acervo"));
+      const checkedDate = doc.verificado_em.split("-").reverse().join("/");
+      const facts = E("p", "exam-document-facts", `${fmt(doc.paginas)} ${doc.paginas === 1 ? "página" : "páginas"} · ${(doc.bytes / 1024 / 1024).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} MB · PDF · Download verificado em ${checkedDate}`);
+      const actions = E("div", "exam-document-actions");
+      if (doc === exam.documentos[0]) add(actions, examButton(exam.cge, "button button-secondary"));
+      const open = E("a", "button button-secondary", "Abrir PDF ↗");
+      open.href = doc.arquivo;
+      open.target = "_blank";
+      open.rel = "noopener noreferrer";
+      add(actions, open, downloadLink(doc, `Baixar ${doc.tipo.toLowerCase()} ↓`, "button"));
+      const sourceHost = doc.url.match(/^https?:\/\/([^/?#]+)/)?.[1] || doc.url;
+      const source = E("a", "exam-source-link", `Fonte original: ${sourceHost} ↗`);
+      source.href = doc.url;
+      source.target = "_blank";
+      source.rel = "noopener noreferrer";
+      const details = E("details", "exam-document-details");
+      const metadata = E("dl", "exam-file-metadata");
+      [["Arquivo original", doc.arquivo_original], ["Endereço de origem", doc.url],
+        ["Download verificado em", doc.verificado_em], ["SHA-256", doc.sha256]]
+        .forEach(([label, value]) => add(metadata, E("dt", "", label), E("dd", "", value)));
+      add(details, E("summary", "", "Detalhes do arquivo"), metadata);
+      add(section, heading, facts, actions, source, details);
+      return section;
+    }
+    function renderExamCard(exam) {
+      const card = E("article", "panel exam-card");
+      const header = E("div", "exam-card-header");
+      const title = E("div");
+      add(title, E("span", "eyebrow", `CGE ${exam.cge}`), E("h3", "", `${exam.ano} · ${exam.semestre}º semestre`));
+      const showQuestions = button("Ver questões →", "button-text", () => {
+        state.library.exam = exam.cge;
+        state.library.page = 1;
+        switchView("library");
+      });
+      add(header, title, showQuestions);
+      const summary = E("div", "exam-card-summary");
+      add(summary, pill(exam.modalidade), E("span", "", `${fmt(exam.questoes)} questões`),
+        E("span", "", `${fmt(exam.paginas)} páginas na prova`));
+      const documents = E("div", "exam-documents");
+      exam.documentos.forEach(doc => add(documents, renderDocument(doc, exam)));
+      add(card, header, summary, documents);
+      return card;
+    }
+    function updateResults() {
+      const filter = state.exams;
+      const needle = plain(filter.search.trim());
+      const filtered = data.exams.filter(exam =>
+        (!filter.year || exam.ano === filter.year) &&
+        (!filter.modality || exam.modalidade === filter.modality) &&
+        (!filter.semester || exam.semestre === filter.semester) &&
+        (!needle || plain([exam.cge, exam.ano, exam.modalidade, ...exam.documentos.map(doc => doc.nome)].join(" ")).includes(needle))
+      );
+      results.replaceChildren();
+      const heading = E("div", "results-heading");
+      add(heading, E("h2", "", "Cadernos disponíveis"), E("span", "", `${fmt(filtered.length)} ${filtered.length === 1 ? "prova" : "provas"}`));
+      add(results, heading, E("p", "exam-date-note", "A data exata da aplicação não consta no acervo. “Download verificado em” indica quando o arquivo foi conferido, não a data da prova."));
+      if (!filtered.length) {
+        add(results, add(E("div", "panel empty"), E("h3", "", "Nenhuma prova encontrada"), E("p", "", "Tente outro ano, semestre, modalidade ou CGE.")));
+      } else {
+        const list = E("div", "exam-list");
+        filtered.forEach(exam => add(list, renderExamCard(exam)));
+        add(results, list);
+      }
     }
     add(workspace, aside, results);
     add(root, pageIntro, stats, workspace);
@@ -611,6 +739,7 @@
       if (active) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current");
     });
     if (view === "library") renderLibrary();
+    else if (view === "exams") renderExams();
     else if (view === "study") renderStudy();
     else if (view === "similarity") renderSimilarity();
     else renderAbout();
