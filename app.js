@@ -381,6 +381,54 @@
     root.querySelectorAll(".print-feedback")[0]?.focus();
   }
 
+  function printLayoutControls(onChange, isKey = false) {
+    const wrap = E("div", "print-layout-controls");
+    const update = (property, value) => {
+      Object.assign(state.print, printModel.settings({...state.print, [property]: value}));
+      saveSelection(); onChange(property);
+    };
+    const select = (label, property, options) => {
+      const field = selectField(label, options, state.print[property], value => update(property, value));
+      field.querySelectorAll(".field")[0].classList.add(`print-setting-${property}`);
+      return field;
+    };
+    const number = (label, property, min, max) => {
+      const group = E("div", "filter-group"), input = E("input", `field print-setting-${property}`);
+      input.type = "number"; input.min = String(min); input.max = String(max); input.step = "1"; input.value = state.print[property];
+      input.setAttribute("aria-label", label);
+      input.addEventListener("input", () => {
+        const value = Number(input.value);
+        if (Number.isInteger(value) && value >= min && value <= max && value !== state.print[property]) update(property, value);
+      });
+      input.addEventListener("change", () => {
+        if (String(input.value) !== String(state.print[property])) update(property, input.value);
+        input.value = state.print[property];
+      });
+      return add(group, E("label", "", label), input);
+    };
+    add(wrap, select("Orientação da página", "orientation", [["portrait", "Retrato"], ["landscape", "Paisagem"]]));
+    if (!isKey) {
+      add(wrap, select("Colunas", "columns", [[1, "1 coluna"], [2, "2 colunas"], [3, "3 colunas"]]),
+        select("Imagens da mesma questão", "imagesPerRow", [[1, "Uma abaixo da outra"], [2, "2 imagens por linha"], [3, "3 imagens por linha"]]),
+        number("Escala das imagens (%)", "scale", 25, 100),
+        select("Questões por coluna", "maxPerColumn", [[0, "Quantas couberem"], [2, "No máximo 2"], [3, "No máximo 3"]]));
+    }
+    const margin = number("Margens da folha (mm)", "margin", 5, 30);
+    add(margin, E("small", "field-help", "5 a 30 mm, nos quatro lados."));
+    add(wrap, margin);
+    const headerOptions = E("div", "print-header-options");
+    const checkboxes = [["showHeader", "Cabeçalho na primeira página"], ["repeatHeader", "Título nas páginas seguintes"]];
+    if (!isKey) checkboxes.push(["questionBorder", "Borda por questão"]);
+    for (const [property, label] of checkboxes) {
+      const checkbox = E("input", `print-setting-${property}`);
+      checkbox.type = "checkbox"; checkbox.checked = state.print[property];
+      checkbox.addEventListener("change", () => update(property, checkbox.checked));
+      add(headerOptions, add(E("label"), checkbox, E("span", "", label)));
+    }
+    add(wrap, headerOptions);
+    return wrap;
+  }
+
   function renderPrintBuilder() {
     root.replaceChildren();
     const selected = state.print.ids.map(id => byId.get(id));
@@ -418,31 +466,36 @@
     const actions = E("div", "print-builder-actions");
     add(actions, button("Prévia da prova", "button preview-test", () => openPrintPreview(false)),
       button("Prévia do gabarito", "button button-secondary preview-key", () => openPrintPreview(true)));
-    add(aside, actions, E("p", "field-help", storageAvailable ? "Seleção e cabeçalho salvos neste navegador." :
+    add(aside, actions, E("p", "field-help", storageAvailable ? "Seleção, cabeçalho e formato salvos neste navegador." :
       "O navegador não permitiu salvar a seleção. Ela ficará disponível enquanto esta aba estiver aberta."));
     const main = E("section", "print-selection");
     main.setAttribute("aria-label", "Questões selecionadas para impressão");
-    const pageCount = printModel.pack(selected).length;
+    const pageCount = printModel.pack(selected, state.print).length;
     const countLabel = count => `${count} ${count === 1 ? "página" : "páginas"}`;
     const selectionTools = E("div", "print-selection-tools");
     add(selectionTools, E("span", "print-page-estimate", `${selected.length} no caderno · ${countLabel(pageCount)} A4`),
       button("Limpar seleção", "button-text clear-print-selection", () => changePrintSelection([], "Todas as questões foram removidas da seleção.")));
     add(main, add(E("div", "results-heading print-results-heading"), E("h2", "", "Questões selecionadas"), selectionTools));
+    const layoutPanel = E("section", "panel print-layout-panel");
+    add(layoutPanel, E("h3", "", "Formato da impressão"), printLayoutControls(property => {
+      renderPrintBuilder(); root.querySelectorAll(`.print-setting-${property}`)[0]?.focus();
+    }), E("p", "field-help", "As questões preenchem cada coluna de cima para baixo. Dentro de cada questão, as imagens podem ficar empilhadas ou lado a lado. 100% usa o espaço de cada imagem; reduza a escala para diminuí-las. Partes da mesma questão mantêm o número amarelo."));
+    add(main, layoutPanel);
     const organization = E("div", "panel print-organization");
     const organizationHelp = E("p", "field-help");
     const updateOrganizationHelp = () => {
       organizationHelp.textContent = state.printOrganization === "subject" ?
         "Agrupa Português, Matemática e Ciências, mantendo a ordem atual dentro de cada matéria." :
         state.printOrganization === "space" ?
-        "Reordena as questões para reduzir espaços vazios; matérias podem se misturar. Mantém o tamanho dos recortes." :
-        "Mantém cada matéria em sequência e procura encaixar melhor as questões dentro dela. Mantém o tamanho dos recortes.";
+        "Reordena as questões para reduzir espaços vazios; matérias podem se misturar. Usa o formato e a escala escolhidos." :
+        "Mantém cada matéria em sequência e procura encaixar melhor as questões dentro dela. Usa o formato e a escala escolhidos.";
     };
     const organizationRow = E("div", "print-organization-row");
     add(organizationRow, selectField("Organizar questões", [["subject-space", "Matéria + aproveitar páginas"], ["subject", "Por matéria"],
       ["space", "Aproveitar páginas"]], state.printOrganization, value => { state.printOrganization = value;updateOrganizationHelp(); }),
       button("Organizar", "button organize-print-selection", () => {
-        const ordered = printModel.organize(selected, state.printOrganization);
-        const after = printModel.pack(ordered).length;
+        const ordered = printModel.organize(selected, state.printOrganization, state.print);
+        const after = printModel.pack(ordered, state.print).length;
         const changed = ordered.some((q, index) => q.id !== selected[index].id);
         const prefix = changed ? "Questões reorganizadas." : "A ordem atual foi mantida.";
         const explanation = after > pageCount ? " Agrupar por matéria pode exigir mais páginas." :
@@ -496,8 +549,9 @@
       window.print();
     });
     print.disabled = true;
-    let downloadURL;
+    let downloadURL, renderVersion = 0, active = true;
     const download = button("Gerar PDF", "button button-secondary download-custom-pdf", async () => {
+      const version = renderVersion;
       download.disabled = true; download.textContent = "Gerando PDF…";
       try {
         const bytes = await window.SENAI_PDF.create({questions:selected,settings:{...state.print},isKey,
@@ -506,43 +560,52 @@
             if (!response.ok) throw new Error("Imagem indisponível");
             return response.arrayBuffer();
           }});
+        if (!active || version !== renderVersion) return;
         downloadURL = URL.createObjectURL(new Blob([bytes],{type:"application/pdf"}));
         const link = E("a","button button-secondary save-custom-pdf","Baixar PDF ↓");
         link.href=downloadURL;link.download=isKey?"gabarito-caderno.pdf":"prova-caderno.pdf";
         download.replaceWith(link);link.focus();
         status.textContent="PDF pronto. Clique em Baixar PDF para salvar o arquivo e imprimir quando quiser.";
       } catch {
-        status.textContent="Não foi possível gerar o PDF. Confira as imagens e use a opção Imprimir, se necessário.";
-      } finally { download.disabled=false;download.textContent="Gerar PDF"; }
+        if (active && version === renderVersion) status.textContent="Não foi possível gerar o PDF. Confira as imagens e use a opção Imprimir, se necessário.";
+      } finally { if (active && version === renderVersion) { download.disabled=false;download.textContent="Gerar PDF"; } }
     });
     download.disabled=true;
     const close = button("← Voltar à seleção", "button button-secondary", () => {
+      active = false; renderVersion++;
       overlay.remove();document.body.classList.remove("print-preview-open");
       if (downloadURL) URL.revokeObjectURL(downloadURL);
       document.querySelector(".site-shell")?.removeAttribute("inert");
-      returnFocus?.focus();
+      if (returnFocus?.isConnected) returnFocus.focus();
+      else root.querySelectorAll(isKey ? ".preview-key" : ".preview-test")[0]?.focus();
     });
     overlay.addEventListener("keydown", event => {
       if (event.key === "Escape") close.click();
       if (event.key === "Tab") {
-        if (event.shiftKey && document.activeElement === close) { event.preventDefault(); (print.disabled ? close : print).focus(); }
-        else if (!event.shiftKey && document.activeElement === (print.disabled ? close : print)) { event.preventDefault(); close.focus(); }
+        const fields = Array.from(overlay.querySelectorAll("button, input, select, a[href]")).filter(item => !item.disabled && !item.hidden);
+        const first = fields[0], last = fields[fields.length-1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
       }
     });
     const outputActions=E("div","print-output-actions");
-    // Em file://, o navegador permite imprimir imagens, mas pode bloquear fetch de arquivos locais.
-    if (isKey || window.location?.protocol !== "file:") add(outputActions,download);
-    add(outputActions,print);
-    add(toolbar, close, add(E("div"), E("strong", "", isKey ? "Gabarito para conferência" : "Prova do aluno"), status), outputActions);
+    add(toolbar, add(E("div", "print-toolbar-main"), close,
+      add(E("div"), E("strong", "", isKey ? "Gabarito para conferência" : "Prova do aluno"), status), outputActions),
+      printLayoutControls(() => { renderPrintBuilder(); renderPreview(); }, isKey),
+      E("p", "print-layout-help", isKey ? "O gabarito acompanha a orientação da folha e mantém a numeração da prova." :
+        "As imagens lado a lado pertencem à mesma questão. 100% usa o espaço de cada imagem; as partes são lidas da esquerda para a direita, depois na linha seguinte."));
     const paper = E("div", "print-pages");
-    const images = [];
+    const printRules = E("style");
     const questionBadge = index => {
       const badge = E("span", "print-question-badge", `${index} / ${selected.length}`);
       badge.setAttribute("aria-label", `Questão ${index} de ${selected.length} no caderno`);
       return badge;
     };
-    const sheetHeader = (first) => {
+    const sheetHeader = (first, format) => {
+      const height = printModel.headerHeight(format, first);
+      if (!height) return null;
       const header = E("header", `print-sheet-header${first ? " first" : ""}`);
+      header.style.height = `${height}mm`;
       add(header, E("h1", "", `${isKey ? "Gabarito · " : ""}${state.print.title || "Lista de exercícios"}`));
       if (first) {
         if (!isKey) add(header, E("p", "", "Nome: ______________________________________________________________"));
@@ -552,58 +615,92 @@
       }
       return header;
     };
-    const addSheet = (index, total) => {
+    const addSheet = (index, total, format) => {
       const sheet = E("section", "print-sheet");
-      add(sheet, sheetHeader(index === 0), E("div", "print-page-number", `${index + 1} / ${total}`));
+      sheet.style.width = `${format.pageWidth}mm`; sheet.style.height = `${format.pageHeight}mm`;
+      sheet.style.padding = `${format.margin}mm`;
+      const pageNumber = E("div", "print-page-number", `${index + 1} / ${total}`);
+      pageNumber.style.top = `${format.footerTop}mm`; pageNumber.style.right = `${format.margin}mm`;
+      add(sheet, sheetHeader(index === 0, format), pageNumber);
       add(paper, sheet);return sheet;
     };
-    if (isKey) {
-      const count = Math.ceil(selected.length/32);
-      for (let page = 0; page < count; page++) {
-        const sheet = addSheet(page, count);
-        const table = E("table", "print-answer-table");
-        const header = E("tr");
-        ["Questão", "Origem", "Disciplina", "Resposta"].forEach(label => add(header, E("th", "", label)));
-        add(table, add(E("thead"), header));const body = E("tbody");
-        selected.slice(page*32,page*32+32).forEach((q,index) => {
-          const row = E("tr");
-          add(row, add(E("td"), questionBadge(page*32+index+1)));
-          [`CGE ${q.cge} · ${q.numero}`, q.disciplina, printModel.answer(q)]
-            .forEach(value => add(row, E("td", "", value)));
-          add(body,row);
+    function renderPreview() {
+      const version = ++renderVersion, format = printModel.layout(state.print), images = [];
+      if (downloadURL) { URL.revokeObjectURL(downloadURL); downloadURL = null; }
+      paper.replaceChildren(); outputActions.replaceChildren();
+      print.disabled = true; download.disabled = true; download.textContent = "Gerar PDF";
+      status.textContent = "Preparando páginas…";
+      // Em file://, fetch de JPEGs locais pode ser bloqueado, mas a impressão nativa funciona.
+      if (isKey || window.location?.protocol !== "file:") add(outputActions, download);
+      add(outputActions, print);
+      printRules.textContent = `@page senai-sheet { size: A4 ${format.orientation}; margin: 0; }`;
+      if (isKey) {
+        const pages = printModel.keyPages(selected, state.print), count = pages.length;
+        for (let page = 0; page < count; page++) {
+          const sheet = addSheet(page, count, format);
+          const table = E("table", "print-answer-table");
+          const header = E("tr");
+          ["Questão", "Origem", "Disciplina", "Resposta"].forEach((label, index) => {
+            const cell = E("th", "", label); cell.style.width = `${format.keyColumnWidths[index]}mm`; add(header, cell);
+          });
+          add(table, add(E("thead"), header));const body = E("tbody");
+          pages[page].questions.forEach((q,index) => {
+            const row = E("tr");
+            add(row, add(E("td"), questionBadge(pages[page].start+index+1)));
+            [`CGE ${q.cge} · ${q.numero}`, q.disciplina, printModel.answer(q)]
+              .forEach(value => add(row, E("td", "", value)));
+            add(body,row);
+          });
+          add(table,body);add(sheet,table);
+        }
+      } else {
+        const pages = printModel.pack(selected, state.print);
+        pages.forEach((page,index) => {
+          const sheet = addSheet(index,pages.length,format);
+          page.rows.forEach(row => {
+            const compact = row.columnWidth < 140;
+            const block = E("section", `print-block${compact ? " print-block-compact" : ""}${format.questionBorder ? " print-block-bordered" : ""}`);
+            block.style.height = `${row.total}mm`; block.style.width = `${row.columnWidth}mm`;
+            block.style.left = `${format.margin+row.x}mm`; block.style.top = `${format.margin+row.y}mm`;
+            const label = printModel.caption(row).join("\n");
+            const labelNode = E("div", "print-block-label"); labelNode.style.height = `${row.labelHeight}mm`;
+            const badge = questionBadge(row.index); badge.style.width = `${row.badgeWidth}mm`;
+            add(block, add(labelNode, E("span", "print-block-source", label), badge));
+            row.items.forEach(item => {
+              const image = E("img", "print-crop");
+              image.alt = `${label} · imagem ${item.part}/${item.parts}`;image.width = item.crop.largura;image.height = item.crop.altura;
+              image.style.width = `${item.width}mm`;image.style.height = `${item.height}mm`;
+              image.style.left = `${item.x-row.x+(item.columnWidth-item.width)/2}mm`;image.style.top = `${row.labelHeight}mm`;
+              // Todos os recortes devem carregar antes de habilitar a impressão.
+              images.push(new Promise((resolve,reject) => {
+                image.onload = () => resolve();image.onerror = () => reject(new Error(item.crop.arquivo));
+              }));
+              image.src = item.crop.arquivo;add(block,image);
+            });
+            add(sheet,block);
+          });
+          if (format.questionBorder) printModel.questionFrames(page).forEach(frame => {
+            const border = E("div", "print-question-frame"); border.setAttribute("aria-hidden", "true");
+            border.style.left = `${format.margin+frame.x}mm`; border.style.top = `${format.margin+frame.y}mm`;
+            border.style.width = `${frame.width}mm`; border.style.height = `${frame.height}mm`;
+            add(sheet,border);
+          });
         });
-        add(table,body);add(sheet,table);
       }
-    } else {
-      const pages = printModel.pack(selected);
-      pages.forEach((page,index) => {
-        const sheet = addSheet(index,pages.length);
-        page.items.forEach(item => {
-          const block = E("section", "print-block");block.style.height = `${item.total}mm`;
-          const label = `Questão ${item.index} · CGE ${item.cge} / original ${item.numero} · ${item.crop.tipo === "apoio" ? "Apoio" : "Questão"}${item.parts > 1 ? ` · parte ${item.part}/${item.parts}` : ""}`;
-          add(block, add(E("div", "print-block-label"), E("span", "print-block-source", label), questionBadge(item.index)));
-          const image = E("img", "print-crop");
-          image.alt = label;image.width = item.crop.largura;image.height = item.crop.altura;
-          image.style.width = `${item.width}mm`;image.style.height = `${item.height}mm`;
-          // Todos os recortes devem carregar antes de habilitar a impressão.
-          images.push(new Promise((resolve,reject) => {
-            image.onload = () => resolve();image.onerror = () => reject(new Error(item.crop.arquivo));
-          }));
-          image.src = item.crop.arquivo;add(block,image);add(sheet,block);
-        });
+      Promise.all(images).then(() => {
+        if (!active || version !== renderVersion) return;
+        print.disabled = false;
+        download.disabled = false;
+        const details = isKey ? "" : ` · ${format.columns} ${format.columns === 1 ? "coluna" : "colunas"} · imagens ${format.scale}%${format.imagesPerRow > 1 ? ` · até ${format.imagesPerRow} imagens por linha` : ""}`;
+        status.textContent = `${paper.children.length} ${paper.children.length === 1 ? "página" : "páginas"} · A4 ${format.orientation === "landscape" ? "paisagem" : "retrato"}${details} · margens ${format.margin} mm. Na impressão do navegador, use escala 100% e desative cabeçalhos e rodapés.`;
+      }).catch(() => {
+        if (active && version === renderVersion) status.textContent = "Uma imagem não carregou. Volte à seleção e abra a prévia novamente antes de imprimir.";
       });
     }
-    add(overlay,toolbar,paper);document.body.appendChild(overlay);
+    add(overlay,printRules,toolbar,paper);document.body.appendChild(overlay);
     document.body.classList.add("print-preview-open");
     document.querySelector(".site-shell")?.setAttribute("inert", "");
-    close.focus();
-    Promise.all(images).then(() => {
-      print.disabled = false;
-      download.disabled = false;
-      status.textContent = `${paper.children.length} ${paper.children.length === 1 ? "página" : "páginas"} · A4 · escala 100%. Desative cabeçalhos e rodapés do navegador. Pode salvar como PDF.`;
-    }).catch(() => {
-      status.textContent = "Uma imagem não carregou. Volte à seleção e abra a prévia novamente antes de imprimir.";
-    });
+    renderPreview(); close.focus();
   }
 
   function renderLibrary() {
