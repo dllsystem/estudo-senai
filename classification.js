@@ -6,7 +6,7 @@
   const plain=s=>(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
   const pct=n=>n==null?'—':new Intl.NumberFormat('pt-BR',{style:'percent',maximumFractionDigits:1}).format(n);
   const label={quase_igual:'Quase igual',mesmo_metodo:'Mesmo método',mesma_habilidade:'Mesma habilidade',mesmo_assunto_apenas:'Só o assunto',sem_relacao:'Sem relação',incerto:'Informação insuficiente'};
-  const state={tab:'explore',search:'',subject:'',topic:'',sub:'',skill:'',method:'',context:'',extra:'',review:'',page:1,pairStatus:'different'};
+  const state={tab:'explore',presentation:'questions',search:'',subject:'',topic:'',sub:'',skill:'',method:'',context:'',extra:'',review:'',page:1,pairStatus:'different'};
   function button(text,fn,cls='button button-secondary'){const b=E('button',cls,text);b.type='button';b.onclick=fn;return b;}
   function render(root,{questions,renderQuestion}) {
     root.replaceChildren();root.classList.add('classification-root');
@@ -32,6 +32,17 @@
     };
     const chip=(text)=>E('span','classification-chip',text);
     function tags(card,title,values){if(!values.length)return;add(card,add(E('div','classification-tags'),E('strong','',title),values.map(chip)));}
+    function classificationDetails(r){
+      const content=E('div','classification-detail-content');
+      add(content,E('h3','',topicName(r.principal)));
+      tags(content,'Temas:',r.assuntos.map(topicName));tags(content,'Subtemas:',r.subassuntos.map(subName));tags(content,'Habilidades:',r.habilidades.map(k=>data.vocabulario.habilidade[k]));
+      tags(content,'Método:',[data.vocabulario.metodo[r.metodo]]);tags(content,'Contexto:',[data.vocabulario.contexto[r.contexto]]);tags(content,'Complementos:',r.extras.map(k=>data.vocabulario.extra[k]));
+      if(r.precisa_fonte)add(content,E('p','classification-note','O modelo sinalizou informação ausente na transcrição. Confira a imagem original.'));
+      const audit=add(E('details','classification-audit'),E('summary','','Comparar classificação e referência'));
+      add(audit,E('p','',`Classificação anterior por palavras-chave: ${r.temas_atuais.map(topicName).join(' · ')||'sem tema'}.`),E('p','',r.referencia?`Referência revisada pelo Codex no piloto: ${topicName(r.referencia.principal)}. ${r.referencia.justificativa}`:'Esta questão ainda não possui classificação de referência revisada individualmente.'),E('p','field-help',`Pontuação do modelo para o tema: ${pct(r.score_principal)}. Isso não representa uma taxa de acerto. Subtemas e facetas são sugestões experimentais; ausência de etiqueta não prova ausência do conteúdo.`));
+      if(r.motivos_revisao?.length)add(audit,E('p','classification-note',r.motivos_revisao.join(' · ')));
+      return add(content,audit);
+    }
     if(state.tab==='explore') {
       const layout=E('div','workspace');const aside=E('aside','panel filter-panel');const results=E('section','result-area');
       add(aside,E('h2','','Cruzar filtros'));
@@ -54,18 +65,27 @@
       function update(){results.replaceChildren();const needle=plain(state.search);
         const filtered=data.questoes.filter(r=>{const q=byId.get(r.id);return q&&(!state.subject||r.disciplina===state.subject)&&(!state.topic||r.assuntos.includes(state.topic)||r.principal===state.topic)&&(!state.sub||r.subassuntos.includes(state.sub))&&(!state.skill||r.habilidades.includes(state.skill))&&(!state.method||r.metodo===state.method)&&(!state.context||r.contexto===state.context)&&(!state.extra||r.extras.includes(state.extra))&&(!needle||plain(q.id+' '+q.enunciado+' '+q.contexto+' '+Object.values(q.alternativas).join(' ')).includes(needle))&&(!state.review||(state.review==='review'&&r.revisar)||(state.review==='source'&&r.precisa_fonte)||(state.review==='different'&&r.concorda_referencia===false)||(state.review==='outside'&&r.principal==='outro'));});
         const pages=Math.max(1,Math.ceil(filtered.length/12));state.page=Math.min(state.page,pages);
-        add(results,add(E('div','results-heading'),E('h2','','Questões classificadas'),E('span','result-count',`${fmt(filtered.length)} de ${fmt(total)} questões`)));
+        const toggle=E('div','view-toggle classification-view-toggle');toggle.setAttribute('role','group');toggle.setAttribute('aria-label','Visualização das questões classificadas');
+        for(const [mode,name] of [['questions','Questões'],['details','Classificação']]){
+          const b=button(name,()=>{state.presentation=mode;update();results.querySelector(`[data-presentation="${mode}"]`).focus();});
+          b.dataset.presentation=mode;b.setAttribute('aria-pressed',String(state.presentation===mode));add(toggle,b);
+        }
+        add(results,add(E('div','results-heading classification-results-heading'),E('h2','','Questões classificadas'),
+          add(E('div','classification-results-tools'),toggle,E('span','result-count',`${fmt(filtered.length)} de ${fmt(total)} questões`))));
         if(!filtered.length)add(results,add(E('div','panel empty'),E('h3','','Nenhuma questão nesta combinação'),E('p','','Remova algum filtro para ampliar os resultados. Ausência de etiqueta não prova ausência de um conteúdo.')));
-        for(const r of filtered.slice((state.page-1)*12,state.page*12)){const q=byId.get(r.id);const c=E('article','panel classification-card');c.dataset.classificationId=r.id;
-          add(c,add(E('div','classification-card-head'),E('strong','question-id',`CGE ${q.cge} · Questão ${q.numero}`),chip(q.disciplina),r.revisar?chip('Conferir classificação'):null),
-            E('h3','',topicName(r.principal)),E('p','classification-excerpt',q.enunciado.replace(/\s+/g,' ').slice(0,340)+(q.enunciado.length>340?'…':'')));
-          tags(c,'Temas:',r.assuntos.map(topicName));tags(c,'Subtemas:',r.subassuntos.map(subName));tags(c,'Habilidades:',r.habilidades.map(k=>data.vocabulario.habilidade[k]));
-          tags(c,'Método:',[data.vocabulario.metodo[r.metodo]]);tags(c,'Contexto:',[data.vocabulario.contexto[r.contexto]]);tags(c,'Complementos:',r.extras.map(k=>data.vocabulario.extra[k]));
-          if(r.precisa_fonte)add(c,E('p','classification-note','O modelo sinalizou informação ausente na transcrição. Confira a imagem original.'));
-          const audit=add(E('details','classification-audit'),E('summary','','Comparar classificação e referência'));
-          add(audit,E('p','',`Classificação anterior por palavras-chave: ${r.temas_atuais.map(topicName).join(' · ')||'sem tema'}.`),E('p','',r.referencia?`Referência revisada pelo Codex no piloto: ${topicName(r.referencia.principal)}. ${r.referencia.justificativa}`:'Esta questão ainda não possui classificação de referência revisada individualmente.'),E('p','field-help',`Pontuação do modelo para o tema: ${pct(r.score_principal)}. Isso não representa uma taxa de acerto. Subtemas e facetas são sugestões experimentais; ausência de etiqueta não prova ausência do conteúdo.`));
-          if(r.motivos_revisao?.length)add(audit,E('p','classification-note',r.motivos_revisao.join(' · ')));
-          add(c,audit,original(q));add(results,c);
+        for(const r of filtered.slice((state.page-1)*12,state.page*12)){
+          const q=byId.get(r.id);
+          const c=state.presentation==='questions'?renderQuestion(q):E('article','panel classification-card');
+          c.dataset.classificationId=r.id;
+          if(state.presentation==='questions'){
+            c.classList.add('classification-question-card');
+            const summary=add(E('summary',''),E('span','','Detalhes da classificação'),r.revisar?chip('Conferir classificação'):null);
+            add(c,add(E('details','classification-details'),summary,classificationDetails(r)));
+          }else{
+            add(c,add(E('div','classification-card-head'),E('strong','question-id',`CGE ${q.cge} · Questão ${q.numero}`),chip(q.disciplina),r.revisar?chip('Conferir classificação'):null),
+              E('p','classification-excerpt',q.enunciado.replace(/\s+/g,' ').slice(0,340)+(q.enunciado.length>340?'…':'')),classificationDetails(r),original(q));
+          }
+          add(results,c);
         }
         if(pages>1){const prev=button('← Anterior',()=>{state.page--;update();results.scrollIntoView();}),next=button('Próxima →',()=>{state.page++;update();results.scrollIntoView();});prev.disabled=state.page===1;next.disabled=state.page===pages;add(results,add(E('div','pagination'),prev,E('span','',`Página ${state.page} de ${pages}`),next));}}
       refreshOptions();add(body,add(layout,aside,results));update();

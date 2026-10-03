@@ -12,6 +12,8 @@ As 2.580 questões foram classificadas por Jev (`typesafe/jev-1.13-20260917`). A
 
 A tela **Classificação** combina todos os filtros. **Programa da prova** mostra as contagens no acervo inteiro. **Dados e avaliação** mostra cobertura, custo e os resultados separados do piloto anterior. Biblioteca e Estudar usam os novos temas. A seleção para impressão continua no navegador.
 
+A visualização inicial de **Explorar questões** usa os mesmos cartões completos da Biblioteca: imagem original ou texto, alternativas, resposta correta, link para o PDF do gabarito e seleção para impressão. **Detalhes da classificação**, ao final de cada cartão, expande temas, subtemas, habilidades, método, contexto e a comparação com a referência. O seletor **Questões / Classificação** no topo alterna todos os resultados entre os cartões completos e o resumo de classificação, mantendo os filtros e a página atual. A seleção para impressão é compartilhada entre as telas.
+
 ## Critérios e limites
 
 O tema principal usa escolha entre os assuntos da disciplina, fora do programa ou informação insuficiente. Assuntos adicionais e subtemas exigem probabilidade de pelo menos 0,70; o principal e os pais de subtemas selecionados também entram nos filtros. O limiar é uma política exploratória, não uma garantia de 70% de acerto. Métodos/contextos são escolhas predominantes; as demais etiquetas são múltiplas.

@@ -370,11 +370,20 @@ h3 { font-size: 25px; margin-bottom: 8px; }
   .page-preview { padding: 7px; }
 }
 
-/* Classificação: sugestões do piloto, isoladas dos filtros publicados. */
+/* Classificação: questões completas e detalhes das sugestões do modelo. */
 .classification-tabs { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 28px; }
 .classification-tabs [aria-pressed="true"] { color:white; background:var(--green, #216b58); }
 .classification-card { padding:24px; margin-bottom:18px; }
-.classification-card h3 { margin:14px 0; font:500 26px/1.2 Georgia,serif; }
+.classification-card h3, .classification-detail-content h3 { margin:14px 0; font:500 26px/1.2 Georgia,serif; }
+.classification-results-heading { align-items:center; flex-wrap:wrap; gap:12px; }
+.classification-results-tools { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+.classification-view-toggle { flex-wrap:wrap; }
+.classification-question-card { margin-bottom:18px; }
+.classification-details { margin-top:18px; padding-top:16px; border-top:1px solid var(--line); }
+.classification-details > summary { cursor:pointer; color:var(--green); font-weight:700; }
+.classification-details > summary .classification-chip { display:inline-block; margin-left:10px; font-size:12px; }
+.classification-details[open] > summary { margin-bottom:18px; }
+.classification-detail-content { line-height:1.6; overflow-wrap:anywhere; }
 .classification-card-head, .classification-tags { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 .classification-tags { margin:10px 0; font-size:13px; }
 .classification-chip { border:1px solid #dce5dd; background:#f2f6f1; color:#284b40; border-radius:6px; padding:4px 8px; max-width:100%; overflow-wrap:anywhere; }
