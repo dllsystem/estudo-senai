@@ -19,7 +19,7 @@
     const topicName=k=>topics.get(k)?.nome||({outro:'Fora do programa listado',insuficiente:'Informação insuficiente'}[k]||k);
     const subName=k=>{const s=subs.get(k);if(!s)return k;const repeated=[...subs.values()].filter(x=>x.nome===s.nome).length>1;return s.nome+(repeated?' — '+topicName('t'+s.assunto_id):'');};
     const body=E('section','classification-body');
-    const intro=add(E('section','page-intro'),E('p','eyebrow',full?'Classificação do acervo':'Piloto de classificação'),E('h1','','Encontre o que a questão exige.'),
+    const intro=add(E('section','page-intro classification-intro'),E('p','eyebrow',full?'Classificação do acervo':'Piloto de classificação'),E('h1','','Encontre o que a questão exige.'),
       E('p','intro-copy',full?`${fmt(total)} questões analisadas. Cruze conteúdo do programa, habilidade e método. As classificações são sugestões automáticas e podem precisar de revisão.`:`${total} questões analisadas neste piloto. Cruze conteúdo do programa, habilidade e método.`));
     const tabs=E('div','classification-tabs');
     [['explore','Explorar questões'],['program','Programa da prova'],['results',full?'Dados e avaliação':'Resultados do piloto']].forEach(([id,name])=>{
