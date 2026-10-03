@@ -729,7 +729,7 @@
       const filtered = topics.filter(t => !state.library.subject || t.disciplina === state.library.subject);
       const options = [["", "Todos os temas"], ...filtered.map(t => [t.id, t.nome])];
       add(topicGroup, selectField("Tema sugerido", options, state.library.topic, value => { state.library.topic = value; state.library.page = 1; updateResults(); }));
-      add(topicGroup, E("small", "field-help", "Temas identificados por palavras do enunciado; algumas questões podem ficar sem tema ou precisar de revisão."));
+      add(topicGroup, E("small", "field-help", "Temas sugeridos por classificação automática do conteúdo. Algumas questões podem ficar sem tema ou precisar de revisão. Cruze mais critérios na tela Classificação."));
     }
     const subject = selectField("Disciplina", [["", "Todas as disciplinas"], ...subjects.map(s => [s, s])], state.library.subject, value => {
       state.library.subject = value;
@@ -1175,7 +1175,7 @@
     [`${fmt(questions.filter(q => q.gabarito === "válida").length)} questões com gabarito válido; ${fmt(questions.filter(q => q.gabarito === "anulada").length)} anuladas.`, `${fmt(readyCount)} transcrições prontas; ${fmt(questions.length - readyCount)} sinalizadas para revisão.`, `${fmt(visualCount)} questões sinalizadas com imagem, gráfico ou tabela, mostrados no cartão.`].forEach(item => add(list, E("li", "", item)));
     add(provenance, list);
     const method = E("section", "panel about-card");
-    add(method, E("h2", "", "Como usar os temas"), E("p", "", "Os 24 temas vêm do programa do processo seletivo. A associação entre pergunta e tema foi sugerida automaticamente por palavras do enunciado; ainda não passou por revisão pedagógica. Uma pergunta pode ter mais de um tema ou nenhum."), E("p", "", "Para um estudo mais preciso, combine tema com a busca por palavras na Biblioteca. No simulado, deixar os temas em branco inclui também as questões sem tema sugerido."));
+    add(method, E("h2", "", "Como usar os temas"), E("p", "", "Os 24 temas vêm do programa do processo seletivo. A associação entre pergunta e tema foi sugerida pelo Jev a partir do enunciado, texto de apoio e alternativas; a revisão pedagógica do acervo completo ainda está pendente. Uma pergunta pode ter mais de um tema ou nenhum."), E("p", "", "Na tela Classificação, combine tema e subtema com habilidade, método de resolução e contexto. No simulado, deixar os temas em branco inclui também as questões sem tema sugerido."));
     const offline = E("section", "panel about-card");
     add(offline, E("h2", "", "Funciona sem internet"), E("p", "", "Descompacte o ZIP e abra index.html no navegador. Os dados, imagens das páginas e PDFs estão dentro da mesma pasta. Também é possível publicar esta pasta em uma hospedagem estática."), E("p", "", "As respostas do simulado ficam apenas na aba aberta; ao fechá-la, a sessão se perde."));
     const caution = E("section", "panel about-card");
@@ -1195,6 +1195,7 @@
     else if (view === "exams") renderExams();
     else if (view === "study") renderStudy();
     else if (view === "similarity") renderSimilarity();
+    else if (view === "classification") window.SENAI_CLASSIFICATION.render(root, { questions, renderQuestion: libraryCard });
     else if (view === "print") renderPrintBuilder();
     else renderAbout();
     window.scrollTo({ top: 0, behavior: "auto" });
@@ -1203,5 +1204,5 @@
 
   document.querySelectorAll(".nav-link").forEach(link => link.addEventListener("click", () => switchView(link.dataset.view)));
   saveSelection();
-  switchView("library");
+  switchView(new URLSearchParams(location.search).get("view") === "classification" ? "classification" : "library");
 })();

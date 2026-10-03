@@ -117,7 +117,7 @@ a { color: var(--green); text-underline-offset: 3px; }
 .brand-copy { display: flex; flex-direction: column; line-height: 1.12; }
 .brand-copy strong { font: bold 23px/1.05 Georgia, serif; letter-spacing: -.04em; }
 .brand-copy small { color: var(--muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; margin-top: 5px; }
-.main-nav { display: flex; align-items: center; gap: 5px; }
+.main-nav { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .nav-link { border: 0; background: transparent; border-radius: 8px; padding: 10px 16px; color: var(--muted); font-weight: 700; font-size: 14px; }
 .nav-link:hover { color: var(--green); background: var(--green-pale); }
 .nav-link.is-active { background: var(--ink); color: white; }
@@ -369,3 +369,27 @@ h3 { font-size: 25px; margin-bottom: 8px; }
   .page-controls .button { font-size: 11px; padding: 5px 7px; }
   .page-preview { padding: 7px; }
 }
+
+/* Classificação: sugestões do piloto, isoladas dos filtros publicados. */
+.classification-tabs { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 28px; }
+.classification-tabs [aria-pressed="true"] { color:white; background:var(--green, #216b58); }
+.classification-card { padding:24px; margin-bottom:18px; }
+.classification-card h3 { margin:14px 0; font:500 26px/1.2 Georgia,serif; }
+.classification-card-head, .classification-tags { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.classification-tags { margin:10px 0; font-size:13px; }
+.classification-chip { border:1px solid #dce5dd; background:#f2f6f1; color:#284b40; border-radius:6px; padding:4px 8px; max-width:100%; overflow-wrap:anywhere; }
+.classification-excerpt { white-space:pre-line; overflow-wrap:anywhere; line-height:1.6; }
+.classification-note { padding:12px 16px; border-left:3px solid #b97638; background:#fff6e3; }
+.classification-audit, .classification-original { margin:16px 0 0; }
+.classification-audit summary, .classification-original summary { cursor:pointer; color:#216b58; font-weight:700; }
+.classification-original > .question-card { margin-top:16px; box-shadow:none; }
+.classification-program, .classification-pair { padding:18px; margin:12px 0; overflow-wrap:anywhere; }
+.classification-program summary, .classification-pair summary { cursor:pointer; font-weight:700; }
+.classification-program li { margin:10px 0; }
+.classification-subject { margin-top:30px; }
+.classification-table-wrap { overflow-x:auto; }
+.classification-table { width:100%; border-collapse:collapse; background:#fffefa; margin:20px 0; }
+.classification-table td, .classification-table th { padding:14px; text-align:left; border-bottom:1px solid #dce5dd; }
+.classification-pair-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }
+.classification-body > p { max-width:85ch; line-height:1.7; }
+@media (max-width:680px) { .classification-pair-grid { grid-template-columns:1fr; } .classification-card { padding:18px; } }

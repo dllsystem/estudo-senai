@@ -21,3 +21,9 @@ Todos os arquivos do repositório e do site publicado ficam públicos no GitHub 
 ## Uso local
 
 Abra `index.html` no navegador. O `README.txt` descreve as telas e o acervo.
+
+## Classificação por conteúdo
+
+As 2.580 questões têm sugestões do Jev para temas, subtemas, habilidades, métodos e contexto. Os filtros da Biblioteca e do modo Estudar usam os novos temas. A tela **Classificação** permite cruzar os campos, consultar o programa de 24 temas/107 subtemas e conferir os resultados separados do piloto.
+
+As classificações são revisáveis; 800 questões receberam indicação de conferência. Os agrupamentos de similaridade foram preservados. O SQLite inclui a versão atual e o histórico auditável, sem credenciais; o navegador não chama a API. Consulte [a documentação da classificação](CLASSIFICACAO.md) para critérios, custos e consultas SQL.
