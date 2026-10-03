@@ -12,6 +12,8 @@
   const questions = data.questions;
   const similarity = data.similaridade || { resumo: {}, familias: [] };
   const topics = data.topics;
+  const libraryModel = window.SENAI_LIBRARY.createModel({ questions, topics, exams: data.exams, classification: window.SENAI_CLASSIFICATION_DATA });
+  let refreshLibrarySelection = null;
   const exams = new Map(data.exams.map(exam => [exam.cge, exam]));
   const topicById = new Map(topics.map(topic => [topic.id, topic]));
   const byId = new Map(questions.map(question => [question.id, question]));
@@ -32,7 +34,9 @@
   const state = {
     view: "library",
     libraryPresentation: savedPresentation,
-    library: { search: "", subject: "", topic: "", exam: "", page: 1 },
+    library: libraryModel.defaults(),
+    libraryTab: "questions",
+    libraryAdvancedOpen: false,
     exams: { search: "", year: "", modality: "", semester: "" },
     study: { subject: "", topics: new Set(), count: 10 },
     similarity: { subject: "", search: "" },
@@ -282,19 +286,32 @@
       q.gabarito === "válida" && choices.includes(q.resposta) ? `Resposta correta: ${q.resposta}` : "Resposta indisponível";
   }
 
-  function sourceFooter(q, selected) {
+  function sourceFooter(q, selected, answerControl = null) {
     const footer = E("div", "question-footer");
     const answer = E("span", `answer-label${q.gabarito === "anulada" ? " annulled" : ""}`, answerText(q));
     if (selected !== undefined) answer.textContent = `Sua resposta: ${selected || "em branco"} · ${answerText(q)}`;
-    add(footer, answer, variantButton(q), questionSourceActions(q));
+    add(footer, answerControl || answer, variantButton(q), questionSourceActions(q));
     return footer;
   }
 
   function libraryCard(q) {
     const card = E("article", "panel question-card");
-    const presentation = questionPresentation(q, null, true, true, state.libraryPresentation === "original");
+    let revealed = false;
+    const presentation = questionPresentation(q, null, () => revealed, true, state.libraryPresentation === "original");
+    const answer = E("span", `answer-label${q.gabarito === "anulada" ? " annulled" : ""}`);
+    answer.setAttribute("aria-live", "polite");
+    answer.hidden = true;
+    const toggle = button("Mostrar resposta", "button button-secondary answer-toggle", () => {
+      revealed = !revealed;
+      answer.textContent = revealed ? answerText(q) : "";
+      answer.hidden = !revealed;
+      toggle.textContent = revealed ? "Ocultar resposta" : "Mostrar resposta";
+      toggle.setAttribute("aria-expanded", String(revealed));
+      presentation.querySelector(".options")?.replaceWith(optionRows(q, null, revealed));
+    });
+    toggle.setAttribute("aria-expanded", "false");
     add(card, questionMeta(q), topicChips(q), presentation);
-    add(card, sourceFooter(q));
+    add(card, sourceFooter(q, undefined, add(E("div", "answer-disclosure"), toggle, answer)));
     return card;
   }
 
@@ -309,6 +326,7 @@
       node.textContent = selected ? "✓ Selecionada para impressão" : "+ Selecionar para impressão";
       node.setAttribute("aria-pressed", String(selected));
     });
+    refreshLibrarySelection?.();
   }
 
   function selectionButton(q) {
@@ -366,7 +384,7 @@
       content.replaceChildren();
       if (isOriginal) add(content, originalImages(q));
       else {
-        add(content, context(q), questionImages(q), E("div", "question-text", q.enunciado), showOptions ? optionRows(q, selected, reveal) : null);
+        add(content, context(q), questionImages(q), E("div", "question-text", q.enunciado), showOptions ? optionRows(q, selected, typeof reveal === "function" ? reveal() : reveal) : null);
         if (!choices.every(letter => hasChoice(q, letter))) add(content, E("p", "note", "Algumas alternativas ainda não foram transcritas; consulte a imagem original."));
       }
     }
@@ -704,14 +722,51 @@
   }
 
   function renderLibrary() {
+    refreshLibrarySelection = null;
     root.replaceChildren();
-    const pageIntro = intro("Acervo de provas", "Todas as questões, em um lugar.", "Consulte os enunciados, alternativas e gabaritos. Use os filtros para encontrar o que quer revisar.");
-    const action = button("Montar um simulado →", "button intro-action", () => switchView("study"));
-    add(pageIntro, action);
+    const pageIntro = intro("Acervo de provas", "Todas as questões, em um lugar.", "Combine os filtros para encontrar o que quer revisar e selecione questões para montar sua prova.");
+    const printAction = button(`Montar prova (${state.print.ids.length}) →`, "button library-print-action", () => switchView("print"));
+    add(pageIntro, add(E("div", "library-intro-actions"), printAction, button("Montar um simulado →", "button button-secondary", () => switchView("study"))));
     const stats = E("div", "stats");
     [[fmt(questions.length), "questões no acervo"], [fmt(data.exams.length), "provas completas"], [fmt(topics.length), "temas do programa"], [fmt(eligible.length), "questões para estudo"]].forEach(([number, label]) => add(stats, add(E("div", "stat"), E("strong", "", number), E("span", "", label))));
-    const workspace = E("div", "workspace");
-    const aside = E("aside", "panel filter-panel");
+    add(root, pageIntro, stats);
+    if (libraryModel.hasClassification) {
+      const tabs = E("div", "library-tabs");
+      tabs.setAttribute("role", "group"); tabs.setAttribute("aria-label", "Conteúdo da Biblioteca");
+      [["questions", "Questões"], ["program", "Programa da prova"]].forEach(([id, title]) => {
+        const control = button(title, "button button-secondary", () => { state.libraryTab = id; renderLibrary(); });
+        control.setAttribute("aria-pressed", String(state.libraryTab === id)); add(tabs, control);
+      });
+      add(root, tabs);
+    }
+    if (state.libraryTab === "program" && libraryModel.hasClassification) {
+      const program = E("section", "library-program");
+      add(program, E("h2", "", "Explore o programa da prova"), E("p", "", "Escolha um tema ou subtema para abrir as questões correspondentes na Biblioteca."));
+      const pdf = E("a", "button button-secondary", "Abrir programa em PDF");
+      pdf.href = libraryModel.classification.programa.arquivo; pdf.target = "_blank"; pdf.rel = "noopener"; add(program, pdf);
+      const explore = (subject, topic, sub = "") => {
+        state.library = { ...libraryModel.defaults(), subject, topic: String(topic), sub: String(sub) };
+        state.libraryTab = "questions"; renderLibrary();
+        const heading = root.querySelector(".library-results-heading h2"); heading.tabIndex = -1; heading.focus(); heading.scrollIntoView({ block: "start" });
+      };
+      for (const subject of subjects) {
+        add(program, E("h3", "classification-subject", subject));
+        for (const topic of libraryModel.classification.taxonomia.assuntos.filter(t => t.disciplina === subject)) {
+          const n = libraryModel.filter({ subject, topic: topic.id }).length;
+          const box = add(E("details", "panel classification-program"), E("summary", "", `${topic.numero_programa}. ${topic.nome} · ${fmt(n)} questões`));
+          add(box, button("Explorar este tema", "button-text", () => explore(subject, topic.id)));
+          const list = E("ul");
+          for (const sub of libraryModel.subs.filter(s => s.assunto_id === topic.id)) {
+            const count = libraryModel.filter({ subject, topic: topic.id, sub: sub.id }).length;
+            add(list, add(E("li"), button(`${sub.nome} — ${fmt(count)} sugestões →`, "button-text classification-subtopic-link", () => explore(subject, topic.id, sub.id))));
+          }
+          add(program, add(box, list));
+        }
+      }
+      add(root, program); return;
+    }
+    const workspace = E("div", "workspace library-workspace");
+    const aside = E("aside", "panel filter-panel library-filter-panel");
     add(aside, add(E("div", "panel-title"), E("h2", "", "Filtrar")));
     const searchGroup = E("div", "filter-group");
     const searchLabel = E("label", "", "Buscar por palavra ou expressão");
@@ -719,45 +774,54 @@
     const search = E("input", "field");
     search.id = "library-search";
     search.type = "search";
-    search.placeholder = "Ex.: crase, porcentagem";
+    search.placeholder = "Ex.: crase, porcentagem, 2245-22";
     search.value = state.library.search;
     search.addEventListener("input", () => { state.library.search = search.value; state.library.page = 1; updateResults(); });
     add(searchGroup, searchLabel, search);
-    const topicGroup = E("div", "filter-group");
-    function rebuildTopicSelect() {
-      topicGroup.replaceChildren();
-      const filtered = topics.filter(t => !state.library.subject || t.disciplina === state.library.subject);
-      const options = [["", "Todos os temas"], ...filtered.map(t => [t.id, t.nome])];
-      add(topicGroup, selectField("Tema sugerido", options, state.library.topic, value => { state.library.topic = value; state.library.page = 1; updateResults(); }));
-      add(topicGroup, E("small", "field-help", "Temas sugeridos por classificação automática do conteúdo. Algumas questões podem ficar sem tema ou precisar de revisão. Cruze mais critérios na tela Classificação."));
+    const labels = { search: "Busca", subject: "Disciplina", topic: "Tema do programa", sub: "Subtema do programa", exam: "Caderno", skill: "Habilidade cobrada", method: "Método de resolução", context: "Contexto da história", extra: "Conteúdo complementar", review: "Conferência", selectedOnly: "Selecionadas para impressão" };
+    const controls = {};
+    const field = (key, empty = "Todos") => {
+      const group = selectField(labels[key], [["", empty], ...libraryModel.options(key, state.library)], state.library[key], value => {
+        state.library = libraryModel.change(state.library, key, value); syncControls(); updateResults();
+      });
+      controls[key] = group.querySelector("select"); return group;
+    };
+    add(aside, searchGroup, field("subject", "Todas as disciplinas"), field("topic", "Todos os temas"));
+    if (libraryModel.hasClassification) add(aside, field("sub", "Todos os subtemas"));
+    add(aside, field("exam", "Todas as provas"));
+    const selectionFilter = E("input"); selectionFilter.type = "checkbox"; selectionFilter.id = "library-selected-only"; selectionFilter.checked = state.library.selectedOnly;
+    const selectionLabel = E("span");
+    selectionFilter.addEventListener("change", () => { state.library = libraryModel.change(state.library, "selectedOnly", selectionFilter.checked); updateResults(); });
+    const selectedRow = add(E("label", "library-selected-filter"), selectionFilter, selectionLabel);
+    add(aside, selectedRow);
+    const advancedKeys = ["skill", "method", "context", "extra", "review"];
+    if (libraryModel.hasClassification) {
+      const advanced = add(E("details", "library-advanced-filters"), E("summary", "", "Filtros avançados"));
+      advanced.open = state.libraryAdvancedOpen || advancedKeys.some(key => state.library[key]);
+      advanced.addEventListener("toggle", () => { state.libraryAdvancedOpen = advanced.open; });
+      add(advanced, advancedKeys.map(key => field(key)));
+      add(aside, advanced, E("small", "field-help", "Classificações automáticas, sujeitas a revisão. Os filtros se combinam: contexto é o cenário; tema e método indicam o conteúdo cobrado."));
     }
-    const subject = selectField("Disciplina", [["", "Todas as disciplinas"], ...subjects.map(s => [s, s])], state.library.subject, value => {
-      state.library.subject = value;
-      if (state.library.topic && !topics.some(t => t.id === Number(state.library.topic) && (!value || t.disciplina === value))) state.library.topic = "";
-      state.library.page = 1;
-      rebuildTopicSelect();
-      updateResults();
-    });
-    rebuildTopicSelect();
-    const examOptions = [["", "Todas as provas"], ...data.exams.map(exam => [exam.cge, `CGE ${exam.cge} · ${exam.ano}`])];
-    const exam = selectField("Caderno", examOptions, state.library.exam, value => { state.library.exam = value; state.library.page = 1; updateResults(); });
-    add(aside, searchGroup, subject, topicGroup, exam);
+    function syncControls() {
+      search.value = state.library.search; selectionFilter.checked = state.library.selectedOnly;
+      for (const [key, select] of Object.entries(controls)) {
+        if (key === "topic" || key === "sub") {
+          const empty = select.options[0].textContent; select.replaceChildren();
+          for (const [value, text] of [["", empty], ...libraryModel.options(key, state.library)]) { const option = E("option", "", text); option.value = value; add(select, option); }
+        }
+        select.value = state.library[key];
+      }
+    }
+    function clearFilters() { state.library = libraryModel.defaults(); syncControls(); updateResults(); }
     const clear = button("Limpar filtros", "button-text", () => {
-      state.library = { search: "", subject: "", topic: "", exam: "", page: 1 };
-      renderLibrary();
+      clearFilters();
     });
     add(aside, clear);
     const results = E("section", "result-area");
     results.setAttribute("aria-label", "Lista de questões");
     function updateResults() {
       const f = state.library;
-      const needle = plain(f.search.trim());
-      const filtered = questions.filter(q =>
-        (!f.subject || q.disciplina === f.subject) &&
-        (!f.topic || q.temas.includes(Number(f.topic))) &&
-        (!f.exam || q.cge === f.exam) &&
-        (!needle || plain([q.enunciado, q.contexto, ...Object.values(q.alternativas)].join(" ")).includes(needle))
-      );
+      const filtered = libraryModel.filter(f, state.print.ids);
       const pageSize = 20;
       const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
       f.page = Math.min(f.page, pageCount);
@@ -783,27 +847,64 @@
       add(tools, presentation, E("span", "result-count", `${fmt(filtered.length)} ${filtered.length === 1 ? "resultado" : "resultados"}`));
       add(heading, E("h2", "", "Questões"), tools);
       results.appendChild(heading);
+      const active = Object.keys(labels).filter(key => f[key]);
+      if (active.length) {
+        const chips = E("div", "library-active-filters"); chips.setAttribute("role", "group"); chips.setAttribute("aria-label", "Filtros ativos");
+        for (const key of active) {
+          const value = key === "selectedOnly" ? labels[key] : key === "search" ? `Busca: ${f[key]}` : libraryModel.label(key, f[key]);
+          const remove = button(`${value} ×`, "library-filter-chip", () => {
+            state.library = libraryModel.change(state.library, key, key === "selectedOnly" ? false : ""); syncControls(); updateResults();
+            const target = key === "search" ? search : key === "selectedOnly" ? selectionFilter : controls[key];
+            const container = target?.closest("details");
+            if (container && !container.open) container.querySelector("summary").focus();
+            else target?.focus();
+          });
+          remove.setAttribute("aria-label", `Remover filtro ${labels[key]}: ${value}`); add(chips, remove);
+        }
+        add(chips, button("Limpar todos", "button-text", clearFilters)); add(results, chips);
+      }
       if (!filtered.length) {
-        add(results, add(E("div", "panel empty"), E("h3", "", "Nenhuma questão encontrada"), E("p", "", "Experimente outra palavra, disciplina ou tema.")));
+        add(results, add(E("div", "panel empty"), E("h3", "", "Nenhuma questão encontrada"), E("p", "", f.selectedOnly ? "Nenhuma questão selecionada atende a esta combinação. Remova algum filtro ou escolha outras questões para impressão." : "Remova algum filtro para ampliar os resultados.")));
         return;
       }
       const list = E("div", "question-list");
-      filtered.slice((f.page - 1) * pageSize, f.page * pageSize).forEach(q => add(list, libraryCard(q)));
+      filtered.slice((f.page - 1) * pageSize, f.page * pageSize).forEach(q => {
+        const card = libraryCard(q), r = libraryModel.records.get(q.id);
+        if (r) {
+          const details = add(E("details", "classification-details"), E("summary", "", "Detalhes da classificação"));
+          const content = add(E("div", "classification-detail-content"), E("h3", "", libraryModel.topicName(r.principal)));
+          const row = (title, values) => { if (values.length) add(content, add(E("div", "classification-tags"), E("strong", "", title), values.map(value => E("span", "classification-chip", value)))); };
+          row("Temas:", r.assuntos.map(libraryModel.topicName)); row("Subtemas:", r.subassuntos.map(libraryModel.subName));
+          row("Habilidades:", r.habilidades.map(key => libraryModel.vocabulary.habilidade[key])); row("Método:", [libraryModel.vocabulary.metodo[r.metodo]]);
+          row("Contexto:", [libraryModel.vocabulary.contexto[r.contexto]]); row("Complementos:", r.extras.map(key => libraryModel.vocabulary.extra[key]));
+          if (r.precisa_fonte) add(content, E("p", "classification-note", "Pode faltar informação na transcrição. Confira a imagem original."));
+          if (r.revisar) add(content, E("p", "classification-note", "Classificação sinalizada para conferência."));
+          add(content, E("p", "field-help", "Temas, subtemas e demais etiquetas são sugestões automáticas. A ausência de uma etiqueta não comprova ausência do conteúdo."));
+          add(card, add(details, content));
+        }
+        add(list, card);
+      });
       results.appendChild(list);
       const pagination = E("div", "pagination");
       add(pagination, E("span", "", `Página ${f.page} de ${pageCount}`));
-      const controls = E("div", "pagination-controls");
+      const paginationControls = E("div", "pagination-controls");
       const prev = button("← Anterior", "button button-secondary", () => { f.page--; updateResults(); results.scrollIntoView({ block: "start" }); });
       const next = button("Próxima →", "button button-secondary", () => { f.page++; updateResults(); results.scrollIntoView({ block: "start" }); });
       prev.disabled = f.page <= 1;
       next.disabled = f.page >= pageCount;
-      add(controls, prev, next);
-      add(pagination, controls);
+      add(paginationControls, prev, next);
+      add(pagination, paginationControls);
       add(results, pagination);
     }
     add(workspace, aside, results);
-    add(root, pageIntro, stats, workspace);
-    updateResults();
+    add(root, workspace);
+    refreshLibrarySelection = () => {
+      selectionLabel.textContent = `Somente selecionadas para impressão (${state.print.ids.length})`;
+      printAction.textContent = `Montar prova (${state.print.ids.length}) →`;
+      if (state.library.selectedOnly) updateResults();
+    };
+    refreshLibrarySelection();
+    if (!state.library.selectedOnly) updateResults();
   }
 
   function renderExams() {
@@ -1185,6 +1286,7 @@
   }
 
   function switchView(view) {
+    refreshLibrarySelection = null;
     state.view = view;
     document.querySelectorAll(".nav-link").forEach(link => {
       const active = link.dataset.view === view;

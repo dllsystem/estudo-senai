@@ -90,13 +90,21 @@
         if(pages>1){const prev=button('← Anterior',()=>{state.page--;update();results.scrollIntoView();}),next=button('Próxima →',()=>{state.page++;update();results.scrollIntoView();});prev.disabled=state.page===1;next.disabled=state.page===pages;add(results,add(E('div','pagination'),prev,E('span','',`Página ${state.page} de ${pages}`),next));}}
       refreshOptions();add(body,add(layout,aside,results));update();
     } else if(state.tab==='program') {
+      const explore=(subject,topic,sub='')=>{
+        Object.assign(state,{tab:'explore',presentation:'questions',topic,subject,sub,skill:'',method:'',context:'',extra:'',review:'',search:'',page:1});
+        render(root,{questions,renderQuestion});
+        const heading=root.querySelector('.results-heading h2');heading.tabIndex=-1;heading.focus();heading.scrollIntoView({block:'start'});
+      };
       add(body,E('h2','','O programa que orienta os filtros'),E('p','',`24 temas e 107 subtemas do PDF enviado. As contagens refletem sugestões de classificação em ${fmt(total)} questões${full?' do acervo':' do piloto'}. Uma questão pode receber mais de um tema.`));
       const pdf=E('a','button button-secondary','Abrir programa em PDF');pdf.href=data.programa.arquivo;pdf.target='_blank';pdf.rel='noopener';add(body,pdf);
       for(const subject of [...new Set([...topics.values()].map(t=>t.disciplina))]){add(body,E('h3','classification-subject',subject));
         for(const [id,t] of topics){if(t.disciplina!==subject)continue;const n=data.questoes.filter(r=>r.principal===id||r.assuntos.includes(id)).length;
           const box=add(E('details','panel classification-program'),E('summary','',`${t.numero_programa}. ${t.nome} · ${fmt(n)} questões`));
-          add(box,button('Explorar este tema',()=>{Object.assign(state,{tab:'explore',topic:id,subject,sub:'',skill:'',method:'',context:'',extra:'',review:'',search:'',page:1});render(root,{questions,renderQuestion});},'button-text'));
-          const list=E('ul','');for(const [sid,s] of subs){if(s.assunto_id!==t.id)continue;const count=data.questoes.filter(r=>r.subassuntos.includes(sid)).length;add(list,E('li','',`${s.nome} — ${fmt(count)} sugestões`));}add(box,list);add(body,box);}}
+          add(box,button('Explorar este tema',()=>explore(subject,id),'button-text'));
+          const list=E('ul','');for(const [sid,s] of subs){if(s.assunto_id!==t.id)continue;const count=data.questoes.filter(r=>r.subassuntos.includes(sid)).length;
+            const link=button(`${s.nome} — ${fmt(count)} sugestões →`,()=>explore(subject,id,sid),'button-text classification-subtopic-link');
+            add(list,add(E('li',''),link));
+          }add(box,list);add(body,box);}}
       add(body,E('p','field-help','Conteúdos complementares são etiquetas separadas: não foram acrescentados ao programa oficial. Um subtema não avaliado pelo modelo não conta como negativo.'));
     } else {
       if(full){const a=data.acervo;const overview=E('div','stats');[[fmt(a.questoes),'questões analisadas'],[fmt(a.com_subtema),'com subtema sugerido'],[fmt(a.revisar),'sinalizadas para conferência'],[`US$ ${a.custo_usd.toFixed(4)}`,'custo da classificação do acervo']].forEach(([n,l])=>add(overview,add(E('div','stat'),E('strong','',n),E('span','',l))));add(body,overview);

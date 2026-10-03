@@ -14,6 +14,18 @@ A tela **Classificação** combina todos os filtros. **Programa da prova** mostr
 
 A visualização inicial de **Explorar questões** usa os mesmos cartões completos da Biblioteca: imagem original ou texto, alternativas, resposta correta, link para o PDF do gabarito e seleção para impressão. **Detalhes da classificação**, ao final de cada cartão, expande temas, subtemas, habilidades, método, contexto e a comparação com a referência. O seletor **Questões / Classificação** no topo alterna todos os resultados entre os cartões completos e o resumo de classificação, mantendo os filtros e a página atual. A seleção para impressão é compartilhada entre as telas.
 
+Na Biblioteca e na Classificação, a resposta começa oculta em cada cartão. **Mostrar resposta** revela a resposta e destaca a alternativa correta no modo texto; **Ocultar resposta** esconde os dois novamente. O link **Ver gabarito** continua abrindo o PDF. Em **Programa da prova**, clicar no nome de um subtema abre as questões correspondentes, aplicando disciplina, tema e subtema e limpando os outros filtros.
+
+## Biblioteca com filtros completos
+
+A Biblioteca reúne busca, disciplina, tema, subtema e caderno. **Filtros avançados** expande habilidade, método, contexto, conteúdo complementar e conferência. Todos os critérios se combinam; os filtros ativos aparecem acima dos resultados e podem ser removidos individualmente ou de uma vez. Ao trocar de disciplina ou tema, subtemas incompatíveis são limpos.
+
+**Somente selecionadas para impressão** mostra a seleção atual, em conjunto com os demais filtros. Desmarcar uma questão nesse modo a retira imediatamente da lista. A seleção é compartilhada com **Montar prova** e com a Classificação. Os cartões mantêm imagem/texto, resposta oculta até solicitar, PDF do gabarito, prova completa e seleção para impressão, além de **Detalhes da classificação** expansíveis.
+
+A aba **Programa da prova** dentro da Biblioteca mostra os 24 temas e 107 subtemas. Clicar em um item abre os resultados na própria Biblioteca, limpando outros critérios. A tela separada **Classificação** mantém sua interface e seus filtros independentes. A implementação reutiliza a classificação já exportada do SQLite, sem novas chamadas ao Jev.
+
+Validação local: `node outputs/banco_questoes/testar_filtros_biblioteca.js` confere os cruzamentos, dependências, seleção, filtros de conferência, ausência de classificação e as contagens de todos os 107 subtemas. Navegador: filtros combinados, remoção individual, programa → questões, seleção para impressão e preservação da Classificação.
+
 ## Critérios e limites
 
 O tema principal usa escolha entre os assuntos da disciplina, fora do programa ou informação insuficiente. Assuntos adicionais e subtemas exigem probabilidade de pelo menos 0,70; o principal e os pais de subtemas selecionados também entram nos filtros. O limiar é uma política exploratória, não uma garantia de 70% de acerto. Métodos/contextos são escolhas predominantes; as demais etiquetas são múltiplas.

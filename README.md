@@ -6,7 +6,7 @@ O projeto é independente e não é um serviço oficial do SENAI.
 
 ## Imagens originais e impressão
 
-A Biblioteca abre com os recortes JPEG das questões por padrão e permite alternar para texto, individualmente ou para toda a lista. Cada questão inclui os textos e as figuras de apoio identificados na extração. A resposta correta permanece visível no rodapé e destacada no modo texto. **Ver gabarito** abre o PDF original em outra aba; nos arquivos que reúnem prova e gabarito, o link aponta para a página do gabarito.
+A Biblioteca abre com os recortes JPEG das questões por padrão e permite alternar para texto, individualmente ou para toda a lista. Cada questão inclui os textos e as figuras de apoio identificados na extração. **Mostrar resposta** revela a resposta correta no rodapé e destaca a alternativa no modo texto; **Ocultar resposta** esconde ambos novamente. **Ver gabarito** abre o PDF original em outra aba; nos arquivos que reúnem prova e gabarito, o link aponta para a página do gabarito.
 
 Em **Montar prova**, selecione exercícios, ajuste título, turma e data e organize por matéria ou para aproveitar melhor as páginas A4. É possível limpar a seleção e desfazer a limpeza ou a organização. A prévia e o PDF mostram badges amarelos com **número / total de questões**, repetidos nas partes da mesma questão e no gabarito separado.
 
@@ -24,6 +24,8 @@ Abra `index.html` no navegador. O `README.txt` descreve as telas e o acervo.
 
 ## Classificação por conteúdo
 
-As 2.580 questões têm sugestões do Jev para temas, subtemas, habilidades, métodos e contexto. Os filtros da Biblioteca e do modo Estudar usam os novos temas. A tela **Classificação** permite cruzar os campos, consultar o programa de 24 temas/107 subtemas e conferir os resultados separados do piloto.
+As 2.580 questões têm sugestões do Jev para temas, subtemas, habilidades, métodos e contexto. A Biblioteca combina busca, disciplina, tema, subtema e caderno, com habilidade, método, contexto, conteúdo complementar e conferência em **Filtros avançados**. Os filtros ativos podem ser removidos individualmente ou todos de uma vez; **Somente selecionadas para impressão** permite revisar a seleção. A aba **Programa da prova** abre as questões de cada tema ou subtema na própria Biblioteca. Cada cartão inclui **Detalhes da classificação** expansíveis.
+
+A tela separada **Classificação** mantém sua interface e seus filtros independentes, com consulta ao programa de 24 temas/107 subtemas e aos resultados do piloto. O modo Estudar também utiliza os novos temas.
 
 As classificações são revisáveis; 800 questões receberam indicação de conferência. Os agrupamentos de similaridade foram preservados. O SQLite inclui a versão atual e o histórico auditável, sem credenciais; o navegador não chama a API. Consulte [a documentação da classificação](CLASSIFICACAO.md) para critérios, custos e consultas SQL.
