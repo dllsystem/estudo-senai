@@ -66,3 +66,7 @@ Em Python, `zlib.decompress(request_zlib).decode('utf-8')` recupera a entrada ex
 Os scripts locais `classificar_acervo_jev.py` e `exportar_classificacao_jev.py` preparam, executam, importam e exportam. Os arquivos de trabalho estão em `work/classificacao_acervo_20261003/`, incluindo o banco anterior, hashes, tarefas congeladas e registro das chamadas.
 
 A importação foi testada em cópia antes da aplicação. A repetição não duplicou dados. Foram conferidos os vínculos, a integridade do SQLite, todas as respostas estruturadas, os hashes das entradas, a preservação de questões/gabaritos/imagens/similaridades e a correspondência dos temas com a exportação estática. Testes no navegador local cobriram filtros, busca, questões fora do piloto, imagens, programa, Biblioteca e sorteio no modo Estudar. A seleção preexistente de 14 questões foi preservada.
+
+## Bloqueio de respostas na interface — versão 30
+
+A consulta de respostas e gabaritos agora exige a senha compartilhada dos professores, com desbloqueio por 4 horas na aba. Os filtros e dados de classificação permanecem iguais. O download do SQLite pela interface também exige a senha, pois inclui as respostas. Isso não altera o banco nem torna os arquivos de hospedagem estática privados. O funcionamento e seus limites estão em [ACESSO_PROFESSORES.md](ACESSO_PROFESSORES.md).

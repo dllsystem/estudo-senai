@@ -8,7 +8,7 @@
   const label={quase_igual:'Quase igual',mesmo_metodo:'Mesmo método',mesma_habilidade:'Mesma habilidade',mesmo_assunto_apenas:'Só o assunto',sem_relacao:'Sem relação',incerto:'Informação insuficiente'};
   const state={tab:'explore',presentation:'questions',search:'',subject:'',topic:'',sub:'',skill:'',method:'',context:'',extra:'',review:'',page:1,pairStatus:'different'};
   function button(text,fn,cls='button button-secondary'){const b=E('button',cls,text);b.type='button';b.onclick=fn;return b;}
-  function render(root,{questions,renderQuestion}) {
+  function render(root,{questions,renderQuestion,protectLink=link=>link}) {
     root.replaceChildren();root.classList.add('classification-root');
     const data=window.SENAI_CLASSIFICATION_DATA;
     if(!data){add(root,E('p','','O arquivo de classificação não foi encontrado.'));return;}
@@ -23,7 +23,7 @@
       E('p','intro-copy',full?`${fmt(total)} questões analisadas. Cruze conteúdo do programa, habilidade e método. As classificações são sugestões automáticas e podem precisar de revisão.`:`${total} questões analisadas neste piloto. Cruze conteúdo do programa, habilidade e método.`));
     const tabs=E('div','classification-tabs');
     [['explore','Explorar questões'],['program','Programa da prova'],['results',full?'Dados e avaliação':'Resultados do piloto']].forEach(([id,name])=>{
-      const b=button(name,()=>{state.tab=id;render(root,{questions,renderQuestion});});b.setAttribute('aria-pressed',String(state.tab===id));add(tabs,b);
+      const b=button(name,()=>{state.tab=id;render(root,{questions,renderQuestion,protectLink});});b.setAttribute('aria-pressed',String(state.tab===id));add(tabs,b);
     });
     add(root,intro,tabs,body);
     const original=(q,labelText='Ver questão e imagens originais')=>{
@@ -59,7 +59,7 @@
       const values=k=>Object.entries(data.vocabulario[k]).map(([id,text])=>[id,text]);
       field('skill','Habilidade cobrada',values('habilidade'));field('method','Método de resolução',values('metodo'));field('context','Contexto da história',values('contexto'));field('extra','Conteúdo complementar',values('extra'));
       field('review','Conferência',[['review','Precisa de revisão'],['source','Conferir fonte original'],['different','Diverge da referência de tema'],['outside','Fora do programa listado']]);
-      add(aside,E('p','field-help','Os filtros se combinam. Contexto é o cenário; tema e método indicam o conhecimento cobrado.'),button('Limpar filtros',()=>{for(const key of ['search','subject','topic','sub','skill','method','context','extra','review'])state[key]='';state.page=1;render(root,{questions,renderQuestion});},'button-text'));
+      add(aside,E('p','field-help','Os filtros se combinam. Contexto é o cenário; tema e método indicam o conhecimento cobrado.'),button('Limpar filtros',()=>{for(const key of ['search','subject','topic','sub','skill','method','context','extra','review'])state[key]='';state.page=1;render(root,{questions,renderQuestion,protectLink});},'button-text'));
       function refreshOptions(){for(const o of controls.topic.options){o.hidden=!!o.value&&!!state.subject&&topics.get(o.value)?.disciplina!==state.subject;}
         for(const o of controls.sub.options){const t=subs.get(o.value);o.hidden=!!o.value&&((!!state.topic&&'t'+t.assunto_id!==state.topic)||(!!state.subject&&topics.get('t'+t.assunto_id)?.disciplina!==state.subject));}}
       function update(){results.replaceChildren();const needle=plain(state.search);
@@ -92,7 +92,7 @@
     } else if(state.tab==='program') {
       const explore=(subject,topic,sub='')=>{
         Object.assign(state,{tab:'explore',presentation:'questions',topic,subject,sub,skill:'',method:'',context:'',extra:'',review:'',search:'',page:1});
-        render(root,{questions,renderQuestion});
+        render(root,{questions,renderQuestion,protectLink});
         const heading=root.querySelector('.results-heading h2');heading.tabIndex=-1;heading.focus();heading.scrollIntoView({block:'start'});
       };
       add(body,E('h2','','O programa que orienta os filtros'),E('p','',`24 temas e 107 subtemas do PDF enviado. As contagens refletem sugestões de classificação em ${fmt(total)} questões${full?' do acervo':' do piloto'}. Uma questão pode receber mais de um tema.`));
@@ -109,12 +109,12 @@
     } else {
       if(full){const a=data.acervo;const overview=E('div','stats');[[fmt(a.questoes),'questões analisadas'],[fmt(a.com_subtema),'com subtema sugerido'],[fmt(a.revisar),'sinalizadas para conferência'],[`US$ ${a.custo_usd.toFixed(4)}`,'custo da classificação do acervo']].forEach(([n,l])=>add(overview,add(E('div','stat'),E('strong','',n),E('span','',l))));add(body,overview);
         const info=add(E('div','panel classification-card'),E('h2','','Classificações salvas no banco principal'),E('p','',`${fmt(a.com_tema)} questões com tema do programa; ${fmt(a.fora_programa)} com tema principal fora da lista; ${fmt(a.insuficiente)} sem informação suficiente para definir o tema principal. Essas contagens não medem a qualidade da classificação.`),E('p','',a.aviso),E('p','field-help',`Versão ${a.versao}. As métricas do piloto abaixo se referem à versão anterior das instruções e não comprovam a qualidade do acervo inteiro.`));
-        const dl=E('a','button button-secondary','Baixar SQLite completo');dl.href='questoes_senai.sqlite3';dl.download='questoes_senai.sqlite3';add(info,dl);add(body,info,E('h2','','Avaliação do piloto anterior'));}
+        const dl=E('a','button button-secondary','Baixar SQLite completo');dl.href='questoes_senai.sqlite3';dl.download='questoes_senai.sqlite3';add(info,protectLink(dl));add(body,info,E('h2','','Avaliação do piloto anterior'));}
       const s=data.resumo;const stats=E('div','stats');[[`${s.temas_principal_exato}/${s.questoes_piloto}`,'temas principais iguais à referência'],[`${s.pares_concordancia_exata}/${s.pares_piloto}`,'pares com a mesma classe da referência'],[`${s.latencia_mediana_s.toFixed(2)} s`,'tempo mediano por chamada'],[`US$ ${s.custo_usd.toFixed(4)}`,'custo informado pela API']].forEach(([n,l])=>add(stats,add(E('div','stat'),E('strong','',n),E('span','',l))));add(body,stats);
       add(body,add(E('div','panel classification-card'),E('h2','','Temas promissores; agrupamentos ainda exigem revisão'),E('p','',s.aviso),E('p','',`Foram analisadas 60 questões, 120 pares e uma etapa adicional de subtemas e habilidades para as mesmas 60 questões. A avaliação de qualidade se limita a essa amostra; os agrupamentos de similaridade continuam preservados.`)));
       const table=E('table','classification-table');const header=E('tr','');['Etiquetas de temas','Precisão da amostra','Cobertura da amostra'].forEach(t=>add(header,E('th','',t)));add(table,add(E('thead',''),header));const tb=E('tbody','');for(const [k,name] of [['atual','Palavras-chave anteriores'],['jev','Jev (limiar 0,50)']]){const m=s.etiquetas_multiplas[k];add(tb,add(E('tr',''),E('td','',name),E('td','',pct(m.precisao)),E('td','',pct(m.cobertura))));}add(table,tb);add(body,add(E('div','classification-table-wrap'),table));
       const test=s.pares_por_split.avaliacao;add(body,E('p','classification-note',`Nos ${test.n} pares reservados para avaliação, o critério forte de 0,90 não aceitou nenhum par. Com 0,50, ${test.criterios[0].tp} dos ${test.criterios[0].aceitos} aceitos concordaram com a referência de relação forte. Esses resultados ainda não sustentam agrupamento automático.`));
-      add(body,E('h2','','Confira as comparações'));const switcher=E('div','classification-tabs');for(const [id,text] of [['different','Divergências'],['same','Concordâncias'],['all','Todos os pares']]){const b=button(text,()=>{state.pairStatus=id;render(root,{questions,renderQuestion});});b.setAttribute('aria-pressed',String(state.pairStatus===id));add(switcher,b);}add(body,switcher);
+      add(body,E('h2','','Confira as comparações'));const switcher=E('div','classification-tabs');for(const [id,text] of [['different','Divergências'],['same','Concordâncias'],['all','Todos os pares']]){const b=button(text,()=>{state.pairStatus=id;render(root,{questions,renderQuestion,protectLink});});b.setAttribute('aria-pressed',String(state.pairStatus===id));add(switcher,b);}add(body,switcher);
       for(const r of data.pares.filter(r=>state.pairStatus==='all'||(state.pairStatus==='same')===r.concorda)){
         const c=add(E('details','panel classification-pair'),E('summary','',`${r.a} ↔ ${r.b} · Jev: ${label[r.jev]} · referência: ${label[r.referencia]}`));
         add(c,E('p','',`Referência Codex: ${r.justificativa_referencia}`),E('p','field-help',`${r.split==='avaliacao'?'Avaliação':'Desenvolvimento'} · Soma das probabilidades de quase igual/mesmo método: ${pct(r.score_forte)}.`));

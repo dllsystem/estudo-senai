@@ -18,6 +18,12 @@
   const topicById = new Map(topics.map(topic => [topic.id, topic]));
   const byId = new Map(questions.map(question => [question.id, question]));
   const printModel = window.SENAI_PRINT;
+  let teacherStorage;
+  try { teacherStorage = window.sessionStorage; } catch { /* Sessão mantida em memória. */ }
+  const teacherSession = window.SENAI_TEACHER_ACCESS.createSession({ config: window.SENAI_TEACHER_CONFIG, storage: teacherStorage });
+  const protectedLinks = new Map();
+  const protectedAddresses = new Map();
+  let accessRequest = null, closeProtectedPreview = null, appReady = false;
   const selectionKey = "senai-print-selection-v1";
   const presentationKey = "senai-library-presentation-v2";
   let savedPresentation = "original";
@@ -81,14 +87,93 @@
 
   function pill(label, variant = "neutral") { return E("span", `pill pill-${variant}`, label); }
 
+  function requestTeacherAccess() {
+    if (teacherSession.checkExpiry()) return Promise.resolve(true);
+    if (accessRequest) return accessRequest;
+    const returnFocus = document.activeElement;
+    const dialog = E("dialog", "teacher-access-dialog");
+    dialog.setAttribute("aria-labelledby", "teacher-access-title");
+    const title = E("h2", "", "Desbloquear respostas e gabaritos"); title.id = "teacher-access-title";
+    const form = E("form", "teacher-access-form");
+    const label = E("label", "", "Senha dos professores"); label.htmlFor = "teacher-password";
+    const input = E("input", "field"); input.id = label.htmlFor; input.type = "password"; input.required = true;
+    input.autocomplete = "off"; input.setAttribute("aria-describedby", "teacher-access-help teacher-access-error");
+    const help = E("p", "field-help", "Digite a senha uma vez para liberar todas as respostas e os gabaritos nesta aba por 4 horas."); help.id = "teacher-access-help";
+    const error = E("p", "teacher-access-error"); error.id = "teacher-access-error"; error.setAttribute("role", "alert");
+    const submit = E("button", "button", "Desbloquear"); submit.type = "submit";
+    let finish, checking = false, completed = false;
+    accessRequest = new Promise(resolve => {
+      finish = success => {
+        if (completed) return;
+        completed = true;
+        if (!success && checking) teacherSession.lock("cancelled");
+        input.value = ""; accessRequest = null; resolve(success);
+        if (dialog.open) dialog.close();
+        dialog.remove();
+        if (returnFocus?.isConnected) returnFocus.focus();
+      };
+    });
+    const pending = accessRequest;
+    form.addEventListener("submit", async event => {
+      event.preventDefault(); if (checking) return;
+      checking = true; submit.disabled = true; error.textContent = "";
+      try {
+        const accepted = await teacherSession.unlock(input.value);
+        if (completed) return;
+        if (accepted) { checking = false; finish(true); }
+        else { error.textContent = "Senha incorreta. Tente novamente."; input.setAttribute("aria-invalid", "true"); input.select(); }
+      } catch {
+        if (!completed) error.textContent = "Não foi possível verificar a senha. Abra o site em um navegador atualizado e tente novamente.";
+      } finally { checking = false; submit.disabled = false; }
+    });
+    input.addEventListener("input", () => { input.removeAttribute("aria-invalid"); error.textContent = ""; });
+    dialog.addEventListener("cancel", event => { event.preventDefault(); finish(false); });
+    dialog.addEventListener("close", () => finish(false));
+    add(form, label, input, help, error, add(E("div", "teacher-access-actions"), button("Cancelar", "button button-secondary", () => finish(false)), submit));
+    add(dialog, title, form); document.body.appendChild(dialog); dialog.showModal(); input.focus();
+    return pending;
+  }
+
+  function withTeacherAccess(action) {
+    if (teacherSession.checkExpiry()) { action(); return; }
+    requestTeacherAccess().then(accepted => { if (accepted && teacherSession.checkExpiry()) action(); });
+  }
+
+  function protectLink(link) {
+    const href = link.getAttribute("href");
+    if (!href) return link;
+    protectedLinks.set(link, href); link.classList.add("teacher-protected-link");
+    const update = () => {
+      const unlocked = teacherSession.isUnlocked();
+      link.classList.toggle("is-locked", !unlocked);
+      if (unlocked) { link.href = href; link.removeAttribute("role"); link.removeAttribute("tabindex"); }
+      else { link.removeAttribute("href"); link.setAttribute("role", "button"); link.tabIndex = 0; }
+    };
+    link.addEventListener("click", event => {
+      if (teacherSession.checkExpiry()) return;
+      event.preventDefault();
+      withTeacherAccess(() => { if (link.isConnected) link.click(); });
+    });
+    link.addEventListener("keydown", event => {
+      if (!teacherSession.isUnlocked() && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); link.click(); }
+    });
+    update(); return link;
+  }
+
+  const documentHasAnswers = doc => doc.tipo !== "Prova";
+  const answerPages = exam => new Set(exam.documentos.flatMap(doc => doc.tipo === "Prova e gabarito" ? doc.paginas_gabarito || [] : []));
+
   function downloadLink(document, label, className = "button button-secondary") {
     const link = E("a", `${className} pdf-download`, label);
     link.href = document.arquivo;
     link.download = document.nome;
-    return link;
+    return documentHasAnswers(document) ? protectLink(link) : link;
   }
 
   function openPageViewer(exam, firstPage = 1, heading = `CGE ${exam.cge} · Prova completa`) {
+    if (answerPages(exam).has(firstPage) && !teacherSession.checkExpiry()) {
+      withTeacherAccess(() => openPageViewer(exam, firstPage, heading)); return;
+    }
     let page = firstPage;
     const dialog = E("dialog", "page-dialog");
     dialog.setAttribute("aria-label", `Páginas da prova CGE ${exam.cge}`);
@@ -96,8 +181,8 @@
     const title = E("strong", "", heading);
     const count = E("span", "page-count");
     const controls = E("div", "page-controls");
-    const previous = button("← Anterior", "button button-secondary", () => { page--; showPage(); });
-    const next = button("Próxima →", "button button-secondary", () => { page++; showPage(); });
+    const previous = button("← Anterior", "button button-secondary", () => changePage(page - 1));
+    const next = button("Próxima →", "button button-secondary", () => changePage(page + 1));
     const zoom = button("Ampliar", "button button-secondary", () => {
       imageArea.classList.toggle("is-zoomed", !imageArea.classList.contains("is-zoomed"));
       zoom.textContent = imageArea.classList.contains("is-zoomed") ? "Ajustar" : "Ampliar";
@@ -111,6 +196,11 @@
     image.alt = `Página ${page} da prova CGE ${exam.cge}`;
     add(imageArea, image);
     add(dialog, toolbar, imageArea);
+    function changePage(target) {
+      if (answerPages(exam).has(target)) {
+        withTeacherAccess(() => { if (dialog.isConnected) { page = target; showPage(); } else openPageViewer(exam, target, heading); });
+      } else { page = target; showPage(); }
+    }
     function showPage() {
       page = Math.min(Math.max(page, 1), exam.paginas);
       image.src = `paginas/CGE${exam.cge}-p${page}.webp`;
@@ -132,7 +222,12 @@
   }
 
   function examButton(cge, className = "button-text") {
-    return button("Ver prova completa", `${className} full-exam-link`, () => openPageViewer(exams.get(cge)));
+    return button("Ver prova completa", `${className} full-exam-link`, () => {
+      const exam = exams.get(cge), blocked = answerPages(exam);
+      let first = 1;
+      if (!teacherSession.isUnlocked()) while (blocked.has(first) && first < exam.paginas) first++;
+      openPageViewer(exam, first);
+    });
   }
 
   function answerKeyLink(q) {
@@ -144,7 +239,7 @@
     link.target = "_blank";
     link.rel = "noopener noreferrer";
     link.title = `Abrir PDF do gabarito CGE ${q.cge} em outra aba`;
-    return link;
+    return protectLink(link);
   }
 
   function questionSourceActions(q, hideAnswers = false) {
@@ -202,6 +297,7 @@
   }
 
   function optionRows(q, selected, reveal) {
+    reveal = Boolean(reveal && teacherSession.isUnlocked());
     const list = E("div", "options");
     for (const letter of choices) {
       if (!hasChoice(q, letter)) continue;
@@ -243,6 +339,15 @@
   }
 
   function variantCard(q, hideAnswers, relationType) {
+    if (!hideAnswers) {
+      const card = libraryCard(q); card.className = "variant-card";
+      const meta = card.querySelector(".question-meta");
+      if (relationType === "quase_igual") add(meta, pill("Enunciado quase igual", "warm"));
+      else if (relationType === "mesmo_metodo") add(meta, pill("Mesmo procedimento"));
+      else if (relationType === "mesma_habilidade") add(meta, pill("Mesma habilidade"));
+      card.querySelector(".variant-link")?.remove();
+      return card;
+    }
     const card = E("article", "variant-card");
     const meta = questionMeta(q);
     if (relationType === "quase_igual") add(meta, pill("Enunciado quase igual", "warm"));
@@ -282,6 +387,7 @@
   }
 
   function answerText(q) {
+    if (!teacherSession.isUnlocked()) return "Resposta bloqueada";
     return q.gabarito === "anulada" ? "Questão anulada" :
       q.gabarito === "válida" && choices.includes(q.resposta) ? `Resposta correta: ${q.resposta}` : "Resposta indisponível";
   }
@@ -301,13 +407,16 @@
     const answer = E("span", `answer-label${q.gabarito === "anulada" ? " annulled" : ""}`);
     answer.setAttribute("aria-live", "polite");
     answer.hidden = true;
-    const toggle = button("Mostrar resposta", "button button-secondary answer-toggle", () => {
+    function toggleAnswer() {
       revealed = !revealed;
       answer.textContent = revealed ? answerText(q) : "";
       answer.hidden = !revealed;
       toggle.textContent = revealed ? "Ocultar resposta" : "Mostrar resposta";
       toggle.setAttribute("aria-expanded", String(revealed));
       presentation.querySelector(".options")?.replaceWith(optionRows(q, null, revealed));
+    }
+    const toggle = button("Mostrar resposta", "button button-secondary answer-toggle", () => {
+      if (revealed) toggleAnswer(); else withTeacherAccess(toggleAnswer);
     });
     toggle.setAttribute("aria-expanded", "false");
     add(card, questionMeta(q), topicChips(q), presentation);
@@ -553,6 +662,7 @@
   }
 
   function openPrintPreview(isKey) {
+    if (isKey && !teacherSession.checkExpiry()) { withTeacherAccess(() => openPrintPreview(true)); return; }
     const selected = state.print.ids.map(id => byId.get(id));
     if (!selected.length) return;
     const returnFocus = document.activeElement;
@@ -564,11 +674,13 @@
     status.setAttribute("role", "status");
     const print = button(isKey ? "Imprimir gabarito" : "Imprimir prova", "button print-now", async () => {
       if (print.disabled) return;
+      if (isKey && !teacherSession.checkExpiry()) { withTeacherAccess(() => openPrintPreview(true)); return; }
       window.print();
     });
     print.disabled = true;
     let downloadURL, renderVersion = 0, active = true;
     const download = button("Gerar PDF", "button button-secondary download-custom-pdf", async () => {
+      if (isKey && !teacherSession.checkExpiry()) { withTeacherAccess(() => openPrintPreview(true)); return; }
       const version = renderVersion;
       download.disabled = true; download.textContent = "Gerando PDF…";
       try {
@@ -578,10 +690,11 @@
             if (!response.ok) throw new Error("Imagem indisponível");
             return response.arrayBuffer();
           }});
-        if (!active || version !== renderVersion) return;
+        if (!active || version !== renderVersion || (isKey && !teacherSession.checkExpiry())) return;
         downloadURL = URL.createObjectURL(new Blob([bytes],{type:"application/pdf"}));
         const link = E("a","button button-secondary save-custom-pdf","Baixar PDF ↓");
         link.href=downloadURL;link.download=isKey?"gabarito-caderno.pdf":"prova-caderno.pdf";
+        if (isKey) protectLink(link);
         download.replaceWith(link);link.focus();
         status.textContent="PDF pronto. Clique em Baixar PDF para salvar o arquivo e imprimir quando quiser.";
       } catch {
@@ -591,12 +704,14 @@
     download.disabled=true;
     const close = button("← Voltar à seleção", "button button-secondary", () => {
       active = false; renderVersion++;
+      if (isKey) closeProtectedPreview = null;
       overlay.remove();document.body.classList.remove("print-preview-open");
       if (downloadURL) URL.revokeObjectURL(downloadURL);
       document.querySelector(".site-shell")?.removeAttribute("inert");
       if (returnFocus?.isConnected) returnFocus.focus();
       else root.querySelectorAll(isKey ? ".preview-key" : ".preview-test")[0]?.focus();
     });
+    if (isKey) closeProtectedPreview = () => close.click();
     overlay.addEventListener("keydown", event => {
       if (event.key === "Escape") close.click();
       if (event.key === "Tab") {
@@ -956,17 +1071,26 @@
       open.href = doc.arquivo;
       open.target = "_blank";
       open.rel = "noopener noreferrer";
+      if (documentHasAnswers(doc)) protectLink(open);
       add(actions, open, downloadLink(doc, `Baixar ${doc.tipo.toLowerCase()} ↓`, "button"));
       const sourceHost = doc.url.match(/^https?:\/\/([^/?#]+)/)?.[1] || doc.url;
       const source = E("a", "exam-source-link", `Fonte original: ${sourceHost} ↗`);
       source.href = doc.url;
       source.target = "_blank";
       source.rel = "noopener noreferrer";
+      if (documentHasAnswers(doc)) protectLink(source);
       const details = E("details", "exam-document-details");
       const metadata = E("dl", "exam-file-metadata");
       [["Arquivo original", doc.arquivo_original], ["Endereço de origem", doc.url],
         ["Download verificado em", doc.verificado_em], ["SHA-256", doc.sha256]]
-        .forEach(([label, value]) => add(metadata, E("dt", "", label), E("dd", "", value)));
+        .forEach(([label, value]) => {
+          const detail = E("dd", "", value);
+          if (label === "Endereço de origem" && documentHasAnswers(doc)) {
+            protectedAddresses.set(detail, value);
+            if (!teacherSession.isUnlocked()) detail.textContent = "Desbloqueie para consultar o endereço do gabarito.";
+          }
+          add(metadata, E("dt", "", label), detail);
+        });
       add(details, E("summary", "", "Detalhes do arquivo"), metadata);
       add(section, heading, facts, actions, source, details);
       return section;
@@ -1053,7 +1177,7 @@
 
   function renderStudy() {
     root.replaceChildren();
-    const pageIntro = intro("Seu espaço de prática", "Estude no seu ritmo.", "Escolha disciplinas e temas, responda sem ver o gabarito e confira o resultado ao terminar.");
+    const pageIntro = intro("Seu espaço de prática", "Estude no seu ritmo.", "Escolha disciplinas e temas e responda às questões. A correção é liberada com a senha dos professores.");
     const workspace = E("div", "workspace");
     const aside = E("aside", "panel filter-panel study-aside");
     add(aside, add(E("div", "panel-title"), E("h2", "", "Seu simulado")));
@@ -1106,7 +1230,7 @@
 
   function renderStudyWelcome(main) {
     const panel = E("div", "panel study-welcome");
-    add(panel, E("span", "eyebrow", "Pronto para começar?"), E("h2", "", "Um caderno só seu."), E("p", "", "As perguntas vêm das provas originais. Escolha seus temas à esquerda, marque as alternativas e descubra seus acertos no final."));
+    add(panel, E("span", "eyebrow", "Pronto para começar?"), E("h2", "", "Um caderno só seu."), E("p", "", "As perguntas vêm das provas originais. Escolha seus temas à esquerda e marque as alternativas. Ao terminar, peça ao professor para liberar a correção."));
     add(main, panel);
   }
 
@@ -1142,7 +1266,7 @@
     const right = E("div", "quiz-actions-right");
     const next = button("Próxima →", "button button-secondary", () => { session.index++; renderStudy(); });
     next.disabled = session.index === session.ids.length - 1;
-    const finish = button("Conferir resultados", "button", () => { session.finished = true; renderStudy(); window.scrollTo({ top: 0, behavior: "smooth" }); });
+    const finish = button("Finalizar simulado", "button", () => { session.finished = true; renderStudy(); window.scrollTo({ top: 0, behavior: "smooth" }); });
     add(right, next, finish);
     add(actions, previous, right);
     add(panel, actions);
@@ -1151,6 +1275,14 @@
 
   function renderStudyResults(main) {
     const session = state.session;
+    if (!teacherSession.isUnlocked()) {
+      const panel = E("div", "panel study-welcome");
+      add(panel, E("span", "eyebrow", "Simulado finalizado"), E("h2", "", "Respostas registradas."),
+        E("p", "", `${Object.keys(session.answers).length} de ${session.ids.length} questões respondidas. Peça ao professor para desbloquear a correção.`),
+        button("Desbloquear correção", "button", () => withTeacherAccess(() => renderStudy())),
+        button("Voltar às minhas respostas", "button button-secondary", () => { session.finished = false; renderStudy(); }));
+      add(main, panel); return;
+    }
     const got = session.ids.filter(id => session.answers[id] && session.answers[id] === byId.get(id).resposta).length;
     const skipped = session.ids.filter(id => !session.answers[id]).length;
     const score = E("div", "score-hero");
@@ -1297,7 +1429,7 @@
     else if (view === "exams") renderExams();
     else if (view === "study") renderStudy();
     else if (view === "similarity") renderSimilarity();
-    else if (view === "classification") window.SENAI_CLASSIFICATION.render(root, { questions, renderQuestion: libraryCard });
+    else if (view === "classification") window.SENAI_CLASSIFICATION.render(root, { questions, renderQuestion: libraryCard, protectLink });
     else if (view === "print") renderPrintBuilder();
     else renderAbout();
     window.scrollTo({ top: 0, behavior: "auto" });
@@ -1305,6 +1437,43 @@
   }
 
   document.querySelectorAll(".nav-link").forEach(link => link.addEventListener("click", () => switchView(link.dataset.view)));
+  const accessBar = E("div", "teacher-access-bar");
+  const accessStatus = E("span", "teacher-access-status"); accessStatus.setAttribute("role", "status");
+  const accessButton = button("Desbloquear", "button-text teacher-access-button", () => {
+    if (teacherSession.checkExpiry()) teacherSession.lock();
+    else requestTeacherAccess();
+  });
+  add(accessBar, accessStatus, accessButton);
+  document.querySelector(".site-header").after(accessBar);
+  function refreshAccessStatus() {
+    const session = teacherSession.snapshot();
+    accessStatus.textContent = session.unlocked ? `Respostas e gabaritos liberados até ${new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(session.expiresAt)}` : "Respostas e gabaritos bloqueados";
+    accessButton.textContent = session.unlocked ? "Bloquear agora" : "Desbloquear";
+    accessBar.classList.toggle("is-unlocked", session.unlocked);
+    for (const [link, href] of protectedLinks) {
+      if (!link.isConnected) { protectedLinks.delete(link); continue; }
+      link.classList.toggle("is-locked", !session.unlocked);
+      if (session.unlocked) { link.href = href; link.removeAttribute("role"); link.removeAttribute("tabindex"); }
+      else { link.removeAttribute("href"); link.setAttribute("role", "button"); link.tabIndex = 0; }
+    }
+    for (const [detail, address] of protectedAddresses) {
+      if (!detail.isConnected) { protectedAddresses.delete(detail); continue; }
+      detail.textContent = session.unlocked ? address : "Desbloqueie para consultar o endereço do gabarito.";
+    }
+  }
+  teacherSession.subscribe(session => {
+    refreshAccessStatus();
+    if (!session.unlocked && appReady) {
+      closeProtectedPreview?.();
+      document.querySelectorAll(".variant-dialog, .page-dialog").forEach(dialog => { if (dialog.open) dialog.close(); });
+      switchView(state.view);
+    }
+  });
+  window.addEventListener("focus", () => teacherSession.checkExpiry());
+  window.addEventListener("beforeprint", () => teacherSession.checkExpiry());
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) teacherSession.checkExpiry(); });
+  refreshAccessStatus();
   saveSelection();
+  appReady = true;
   switchView(new URLSearchParams(location.search).get("view") === "classification" ? "classification" : "library");
 })();
