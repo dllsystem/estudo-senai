@@ -22,6 +22,12 @@ Todos os arquivos do repositório e do site publicado ficam públicos no GitHub 
 
 Abra `index.html` no navegador. O `README.txt` descreve as telas e o acervo.
 
+## Consulta às respostas
+
+As respostas e os gabaritos começam ocultos. A primeira consulta inicia uma contagem de **20 segundos**, sem senha, e libera o acesso por **4 horas nesta aba**. A recarga preserva o tempo restante e não renova o prazo. **Cancelar** interrompe a espera; **Bloquear agora** encerra a liberação. Para abrir um PDF em outra aba, clique em **Continuar** ao terminar a contagem.
+
+A mesma liberação vale para a correção do simulado, o gabarito de impressão e o download do SQLite. Os arquivos do site estático continuam públicos. Consulte [o funcionamento da liberação](ACESSO_RESPOSTAS.md).
+
 ## Classificação por conteúdo
 
 As 2.580 questões têm sugestões do Jev para temas, subtemas, habilidades, métodos e contexto. A Biblioteca combina busca, disciplina, tema, subtema e caderno, com habilidade, método, contexto, conteúdo complementar e conferência em **Filtros avançados**. Os filtros ativos podem ser removidos individualmente ou todos de uma vez; **Somente selecionadas para impressão** permite revisar a seleção. A aba **Programa da prova** abre as questões de cada tema ou subtema na própria Biblioteca. Cada cartão inclui **Detalhes da classificação** expansíveis.

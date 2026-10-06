@@ -69,4 +69,9 @@ A importação foi testada em cópia antes da aplicação. A repetição não du
 
 ## Bloqueio de respostas na interface — versão 30
 
-A consulta de respostas e gabaritos agora exige a senha compartilhada dos professores, com desbloqueio por 4 horas na aba. Os filtros e dados de classificação permanecem iguais. O download do SQLite pela interface também exige a senha, pois inclui as respostas. Isso não altera o banco nem torna os arquivos de hospedagem estática privados. O funcionamento e seus limites estão em [ACESSO_PROFESSORES.md](ACESSO_PROFESSORES.md).
+A consulta de respostas e gabaritos agora exige a senha compartilhada dos professores, com desbloqueio por 4 horas na aba. Os filtros e dados de classificação permanecem iguais. O download do SQLite pela interface também exige a senha, pois inclui as respostas. Isso não altera o banco nem torna os arquivos de hospedagem estática privados. O funcionamento e seus limites estão em [ACESSO_RESPOSTAS.md](ACESSO_RESPOSTAS.md).
+
+
+## Liberação sem senha — versão 32
+
+A versão 32 substitui a senha por uma espera de 20 segundos na primeira consulta às respostas e aos gabaritos. A liberação continua válida por quatro horas na aba e se aplica também à correção do simulado, ao gabarito para impressão e ao download do SQLite. A recarga retoma a contagem ou mantém o prazo original; cancelar interrompe a espera. Os dados e filtros de classificação permanecem iguais. Veja [ACESSO_RESPOSTAS.md](ACESSO_RESPOSTAS.md).
